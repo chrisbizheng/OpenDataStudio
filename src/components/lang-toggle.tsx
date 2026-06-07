@@ -11,6 +11,7 @@ export function LangToggle() {
       onClick={() => setLang(lang === "zh" ? "en" : "zh")}
       className="p-1 hover:bg-muted rounded-md text-muted-foreground transition-colors text-[11px] font-medium"
       title={t("lang.switch", lang)}
+      aria-label={t("lang.switch", lang)}
     >
       {t("lang.switch", lang)}
     </button>

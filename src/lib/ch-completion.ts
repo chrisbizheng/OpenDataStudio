@@ -1,5 +1,5 @@
 import { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
-import { keywordCompletionSource, SQLDialect } from "@codemirror/lang-sql";
+import { keywordCompletionSource } from "@codemirror/lang-sql";
 import { scanFromJoinAliases } from "./ch-schema-resolver";
 import { ClickHouse } from "./ch-dialect";
 

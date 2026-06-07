@@ -30,7 +30,6 @@ export function SqlConsole({
   selectedDatabase,
 }: SqlConsoleProps) {
   const { _t } = useLang()
-  const [isFocused, setIsFocused] = useState(false)
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -132,7 +131,7 @@ export function SqlConsole({
           {_t("sql.insert_select")}
         </button>
       </div>
-      <div className="flex-1 overflow-auto" onClick={() => setIsFocused(true)}>
+      <div className="flex-1 overflow-auto">
         <CodeMirror
           value={sqlText}
           onChange={onSqlChange}

@@ -14,6 +14,7 @@ export function ThemeToggle() {
       onClick={toggle}
       className="p-1 hover:bg-muted rounded-md text-muted-foreground transition-colors"
       title={`${theme} (${resolved})`}
+      aria-label={`Theme: ${theme} (${resolved})`}
     >
       {resolved === "dark" ? (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

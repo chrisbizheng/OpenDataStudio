@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useCallback, useEffect, useMemo, useState } from "react"
 import type { Lang } from "@/lib/i18n"
 import { t, getStoredLang, setStoredLang } from "@/lib/i18n"
 
@@ -27,15 +27,17 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     setLangState(getStoredLang())
   }, [])
 
-  const setLang = (l: Lang) => {
+  const setLang = useCallback((l: Lang) => {
     setLangState(l)
     setStoredLang(l)
-  }
+  }, [])
 
-  const _t = (key: string) => t(key, lang)
+  const _t = useCallback((key: string) => t(key, lang), [lang])
+
+  const value = useMemo(() => ({ lang, setLang, _t }), [lang, setLang, _t])
 
   return (
-    <LangContext.Provider value={{ lang, setLang, _t }}>
+    <LangContext.Provider value={value}>
       {children}
     </LangContext.Provider>
   )

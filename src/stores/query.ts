@@ -19,7 +19,6 @@ interface QueryState {
   sort: SortState
   searchQuery: string
   loadedRows: number
-  allRows: unknown[][]
   setCurrentTable: (table: string | null) => void
   setData: (data: TableData | null) => void
   setExecuting: (executing: boolean) => void
@@ -30,6 +29,8 @@ interface QueryState {
   executeQuery: (sql: string, tableName: string, append?: boolean) => Promise<void>
 }
 
+let abortController: AbortController | null = null
+
 export const useQueryStore = create<QueryState>((set, get) => ({
   currentTable: null,
   data: null,
@@ -38,7 +39,6 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   sort: { column: null, direction: null },
   searchQuery: "",
   loadedRows: 0,
-  allRows: [],
   setCurrentTable: (table) => set({ currentTable: table }),
   setData: (data) => set({ data }),
   setExecuting: (executing) => set({ isExecuting: executing }),
@@ -53,7 +53,11 @@ export const useQueryStore = create<QueryState>((set, get) => ({
     await executeQuery(sql, currentTable, true)
   },
   executeQuery: async (sql, tableName, append = false) => {
-    const state = get()
+    if (abortController) {
+      abortController.abort()
+    }
+    abortController = new AbortController()
+
     if (!append) {
       set({ isExecuting: true, error: null, currentTable: tableName })
     } else {
@@ -64,6 +68,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sql }),
+        signal: abortController.signal,
       })
       const json = await res.json()
       if (!res.ok) {
@@ -71,24 +76,24 @@ export const useQueryStore = create<QueryState>((set, get) => ({
         return
       }
       const newRows = json.rows as unknown[][]
-      if (append && state.data) {
-        const merged = [...state.allRows, ...newRows]
+      if (append && get().data) {
+        const state = get()
+        const merged = [...(state.data?.rows ?? []), ...newRows]
         set({
-          data: { ...state.data, rows: merged },
-          allRows: merged,
+          data: { ...state.data!, rows: merged },
           loadedRows: merged.length,
           isExecuting: false,
         })
       } else {
         set({
           data: json,
-          allRows: json.rows,
           loadedRows: json.rows.length,
           isExecuting: false,
           error: null,
         })
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return
       set({
         error: e instanceof Error ? e.message : "Network error",
         isExecuting: false,
@@ -99,7 +104,6 @@ export const useQueryStore = create<QueryState>((set, get) => ({
 
 export function getFilteredRows(
   rows: unknown[][],
-  columns: string[],
   searchQuery: string
 ): unknown[][] {
   if (!searchQuery.trim()) return rows

@@ -1,11 +1,18 @@
 "use client"
 
+import { useShallow } from "zustand/react/shallow"
 import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
+import { formatRowCount } from "@/lib/format"
 
 export function StatusBar() {
   const { _t } = useLang()
-  const { isConnected, tables, totalRows, error } = useDatasetStore()
+  const { isConnected, tables, totalRows, error } = useDatasetStore(useShallow((s) => ({
+    isConnected: s.isConnected,
+    tables: s.tables,
+    totalRows: s.totalRows,
+    error: s.error,
+  })))
 
   return (
     <div className="flex items-center justify-between px-3 py-1 text-xs text-muted-foreground border-t border-border bg-muted/20">
@@ -22,16 +29,10 @@ export function StatusBar() {
       <div className="tabular-nums">
         {tables.length > 0 && (
           <span>
-            {tables.length} {_t("status.tables")} · {formatNumber(totalRows)} {_t("status.rows_total")}
+            {tables.length} {_t("status.tables")} · {formatRowCount(totalRows)} {_t("status.rows_total")}
           </span>
         )}
       </div>
     </div>
   )
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
 }

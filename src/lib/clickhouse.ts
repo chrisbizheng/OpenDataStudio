@@ -39,10 +39,6 @@ function getClient() {
   return client
 }
 
-function qualify(db: string | undefined, table: string): string {
-  return db ? `${db}.${table}` : table
-}
-
 export async function getDatabases(): Promise<{ name: string; comment: string }[]> {
   const c = getClient()
   const result = await c.query({

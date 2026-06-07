@@ -1,9 +1,14 @@
 "use client"
 
+import { useShallow } from "zustand/react/shallow"
 import { useSqlHistoryStore } from "@/stores/sql-history"
+import { formatTime } from "@/lib/format"
 
 export function SqlHistory() {
-  const { entries, clearHistory } = useSqlHistoryStore()
+  const { entries, clearHistory } = useSqlHistoryStore(useShallow((s) => ({
+    entries: s.entries,
+    clearHistory: s.clearHistory,
+  })))
 
   if (entries.length === 0) {
     return (
@@ -45,14 +50,4 @@ export function SqlHistory() {
       </div>
     </div>
   )
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return "just now"
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString()
 }

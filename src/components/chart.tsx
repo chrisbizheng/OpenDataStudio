@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -20,10 +21,10 @@ const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"
 export function Chart({ data, config }: ChartProps) {
   if (!data || data.length === 0) return null
 
-  const chartData = data.map((row) => ({
+  const chartData = useMemo(() => data.map((row) => ({
     ...row,
     [config.yKey]: Number(row[config.yKey]) || 0,
-  }))
+  })), [data, config.yKey])
 
   const renderChart = () => {
     switch (config.type) {

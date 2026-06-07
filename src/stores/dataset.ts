@@ -26,6 +26,7 @@ interface DatasetState {
   setConnected: (connected: boolean) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+  selectDatabase: (db: string) => void
 }
 
 export const useDatasetStore = create<DatasetState>()(
@@ -49,7 +50,18 @@ export const useDatasetStore = create<DatasetState>()(
       setConnected: (connected) => set({ isConnected: connected }),
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
+      selectDatabase: (db) => set({
+        selectedDatabase: db,
+        selectedTable: null,
+        schema: [],
+      }),
     }),
-    { name: "dataset-store", partialize: (state) => ({ selectedDatabase: state.selectedDatabase }) }
+    {
+      name: "dataset-store",
+      partialize: (state) => ({
+        selectedDatabase: state.selectedDatabase,
+        selectedTable: state.selectedTable,
+      }),
+    }
   )
 )

@@ -43,7 +43,6 @@ function applyTheme(theme: Theme) {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system")
-  const [mounted, setMounted] = useState(false)
   const applied = useRef(false)
 
   useEffect(() => {
@@ -52,7 +51,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setThemeState(stored)
       applyTheme(stored)
     }
-    setMounted(true)
   }, [])
 
   const setTheme = (t: Theme) => {

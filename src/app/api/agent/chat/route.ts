@@ -76,7 +76,7 @@ Rules:
       method: "POST",
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(55000),
     })
 
     if (!llmRes.ok) {
@@ -106,12 +106,31 @@ Rules:
 
     if (sql) {
       const singleSql = sql.split(";").map((s: string) => s.trim()).filter((s: string) => s && !s.startsWith("--"))[0] || sql
+      const upperSql = singleSql.toUpperCase().trim()
+      const isReadOnly = upperSql.startsWith("SELECT") || upperSql.startsWith("SHOW") || upperSql.startsWith("DESCRIBE") || upperSql.startsWith("EXPLAIN")
+      if (!isReadOnly) {
+        return NextResponse.json({
+          message: parsed.message || content,
+          sql: formattedSql || sql || null,
+          rows: [],
+          columns: [],
+          visualization: parsed.visualization || null,
+          error: "Only SELECT, SHOW, DESCRIBE, and EXPLAIN statements are allowed",
+        })
+      }
       try {
         const result = await query(singleSql)
         rows = result.rows
         columns = result.columns
-      } catch {
-        // SQL execution failed, return the query for user to inspect
+      } catch (e) {
+        return NextResponse.json({
+          message: parsed.message || content,
+          sql: formattedSql || sql || null,
+          rows: [],
+          columns: [],
+          visualization: parsed.visualization || null,
+          error: e instanceof Error ? e.message : "SQL execution failed",
+        })
       }
     }
 

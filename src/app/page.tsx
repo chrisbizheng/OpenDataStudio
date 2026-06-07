@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, useMemo } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { Sidebar } from "@/components/sidebar"
 import { StatusBar } from "@/components/status-bar"
 import { DataGrid } from "@/components/data-grid"
@@ -17,6 +18,7 @@ import { useDatasetStore } from "@/stores/dataset"
 import { useQueryStore, getFilteredRows } from "@/stores/query"
 import { useSqlHistoryStore } from "@/stores/sql-history"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
+import { formatRowCount } from "@/lib/format"
 
 export default function Home() {
   const { _t } = useLang()
@@ -29,14 +31,24 @@ export default function Home() {
     toggleRightPanel,
     setRightPanelWidth,
     setActiveTab,
-  } = useUiStore()
-  const { selectedTable, schema, selectedDatabase, tables, databases } = useDatasetStore()
+  } = useUiStore(useShallow((s) => ({
+    sidebarOpen: s.sidebarOpen,
+    rightPanelOpen: s.rightPanelOpen,
+    rightPanelWidth: s.rightPanelWidth,
+    activeTab: s.activeTab,
+    toggleSidebar: s.toggleSidebar,
+    toggleRightPanel: s.toggleRightPanel,
+    setRightPanelWidth: s.setRightPanelWidth,
+    setActiveTab: s.setActiveTab,
+  })))
+  const { selectedTable, schema, selectedDatabase, tables, databases } = useDatasetStore(useShallow((s) => ({
+    selectedTable: s.selectedTable,
+    schema: s.schema,
+    selectedDatabase: s.selectedDatabase,
+    tables: s.tables,
+    databases: s.databases,
+  })))
 
-  function formatRowCount(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-    return String(n)
-  }
   const {
     data,
     isExecuting,
@@ -48,8 +60,19 @@ export default function Home() {
     setSort,
     setSearchQuery,
     loadMore,
-  } = useQueryStore()
-  const { addEntry } = useSqlHistoryStore()
+  } = useQueryStore(useShallow((s) => ({
+    data: s.data,
+    isExecuting: s.isExecuting,
+    error: s.error,
+    sort: s.sort,
+    searchQuery: s.searchQuery,
+    loadedRows: s.loadedRows,
+    executeQuery: s.executeQuery,
+    setSort: s.setSort,
+    setSearchQuery: s.setSearchQuery,
+    loadMore: s.loadMore,
+  })))
+  const addEntry = useSqlHistoryStore((s) => s.addEntry)
   const [sqlText, setSqlText] = useState("")
 
   useEffect(() => {
@@ -57,7 +80,7 @@ export default function Home() {
       const q = `${selectedDatabase}.${selectedTable}`
       executeQuery(`SELECT * FROM ${q} LIMIT 1000`, q)
     }
-  }, [selectedTable, executeQuery])
+  }, [selectedTable, selectedDatabase, executeQuery])
 
   const handleSort = useCallback(
     (column: string) => {
@@ -86,7 +109,7 @@ export default function Home() {
 
   const filteredRows = useMemo(
     () =>
-      data ? getFilteredRows(data.rows, data.columns, searchQuery) : [],
+      data ? getFilteredRows(data.rows, searchQuery) : [],
     [data, searchQuery]
   )
 
@@ -95,14 +118,15 @@ export default function Home() {
       const start = performance.now()
       await executeQuery(sql, selectedTable ?? "")
       const elapsed = (performance.now() - start) / 1000
+      const currentData = useQueryStore.getState().data
       addEntry({
         sql,
         tableName: selectedTable,
         executionTime: elapsed,
-        rowCount: data?.rows.length ?? 0,
+        rowCount: currentData?.rows.length ?? 0,
       })
     },
-    [selectedTable, executeQuery, addEntry, data]
+    [selectedTable, executeQuery, addEntry]
   )
 
   const handleCopyCsv = useCallback(() => {
@@ -362,7 +386,8 @@ export default function Home() {
 
 function TabButton({ tab }: { tab: "agent" | "sql" | "schema" }) {
   const { _t } = useLang()
-  const { activeTab, setActiveTab } = useUiStore()
+  const activeTab = useUiStore((s) => s.activeTab)
+  const setActiveTab = useUiStore((s) => s.setActiveTab)
   const labels = { agent: _t("tab.agent"), sql: _t("tab.sql"), schema: _t("tab.schema") }
   const isActive = activeTab === tab
 

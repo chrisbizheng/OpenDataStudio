@@ -84,9 +84,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
     setThinkingExpanded(true)
 
     try {
-      const llmConfig = localStorage.getItem("llm-config")
-        ? JSON.parse(localStorage.getItem("llm-config")!).state?.config
-        : null
+      const raw = localStorage.getItem("llm-config")
+      const llmConfig = raw ? JSON.parse(raw).state?.config : null
 
       if (!llmConfig || !llmConfig.apiKey) {
         setMessages((prev) => [
@@ -276,6 +275,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             }}
             placeholder={_t("agent.placeholder")}
             disabled={isLoading}
+            aria-label={_t("agent.placeholder")}
             className="flex-1 px-2 py-1.5 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-ring disabled:opacity-50"
           />
           <button

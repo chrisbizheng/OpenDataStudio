@@ -1,4 +1,4 @@
-import { tokenize, Tok } from "./ch-context";
+import { tokenize } from "./ch-context";
 
 export interface TableEntry {
   raw: string;

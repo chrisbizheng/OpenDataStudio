@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { useSqlHistoryStore } from "@/stores/sql-history"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
 import { communityQueries, type CommunityQuery } from "@/lib/community-queries"
 import { useLang } from "@/components/lang-provider"
+import { formatTime } from "@/lib/format"
 
 interface QueryPanelsProps {
   onSelectSql: (sql: string) => void
@@ -15,8 +17,14 @@ type Tab = "history" | "saved" | "community"
 export function QueryPanels({ onSelectSql }: QueryPanelsProps) {
   const { _t } = useLang()
   const [tab, setTab] = useState<Tab>("history")
-  const { entries, clearHistory } = useSqlHistoryStore()
-  const { queries, remove } = useSavedQueriesStore()
+  const { entries, clearHistory } = useSqlHistoryStore(useShallow((s) => ({
+    entries: s.entries,
+    clearHistory: s.clearHistory,
+  })))
+  const { queries, remove } = useSavedQueriesStore(useShallow((s) => ({
+    queries: s.queries,
+    remove: s.remove,
+  })))
 
   return (
     <div className="flex flex-col max-h-56 border-t border-border">
@@ -154,14 +162,4 @@ function CommunityPanel({
       ))}
     </div>
   )
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 60000) return "just now"
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString()
 }

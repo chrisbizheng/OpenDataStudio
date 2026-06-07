@@ -1,18 +1,14 @@
 "use client"
 
 import { useEffect, useCallback } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
+import { formatRowCount } from "@/lib/format"
 import type { TableMeta, ColumnMeta } from "@/lib/clickhouse"
-
-function formatRowCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
 
 export function Sidebar() {
   const { _t } = useLang()
@@ -32,7 +28,25 @@ export function Sidebar() {
     setConnected,
     setLoading,
     setError,
-  } = useDatasetStore()
+    selectDatabase,
+  } = useDatasetStore(useShallow((s) => ({
+    databases: s.databases,
+    selectedDatabase: s.selectedDatabase,
+    tables: s.tables,
+    selectedTable: s.selectedTable,
+    isLoading: s.isLoading,
+    error: s.error,
+    setDatabases: s.setDatabases,
+    setSelectedDatabase: s.setSelectedDatabase,
+    setTables: s.setTables,
+    setSelectedTable: s.setSelectedTable,
+    setSchema: s.setSchema,
+    setTotalRows: s.setTotalRows,
+    setConnected: s.setConnected,
+    setLoading: s.setLoading,
+    setError: s.setError,
+    selectDatabase: s.selectDatabase,
+  })))
 
   const loadTables = useCallback(
     async (db: string) => {
@@ -113,7 +127,8 @@ export function Sidebar() {
         {databases.length > 0 && (
           <select
             value={selectedDatabase}
-            onChange={(e) => setSelectedDatabase(e.target.value)}
+            onChange={(e) => selectDatabase(e.target.value)}
+            aria-label="Database"
             className="w-full text-xs rounded border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-ring"
           >
             {databases.map((db) => (

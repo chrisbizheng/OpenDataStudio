@@ -1,3 +1,5 @@
+"use client"
+
 import { useCallback, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { renderValue } from "./column-renderer"
@@ -265,6 +267,7 @@ function SearchBar({
         placeholder={_t("search.placeholder")}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
+        aria-label={_t("search.placeholder")}
         className="w-full pl-7 pr-2 py-1 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-ring"
       />
     </div>

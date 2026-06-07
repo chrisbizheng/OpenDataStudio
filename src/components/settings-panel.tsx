@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -41,11 +41,9 @@ export const useLlmStore = create<LlmState>()(
 
 export function getLlmHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {}
-  const raw = localStorage.getItem("llm-config")
-  if (!raw) return {}
   try {
-    const parsed = JSON.parse(raw)
-    const config = parsed.state?.config as LlmConfig
+    const config = useLlmStore.getState().config
+    if (!config.apiKey) return {}
     return { "x-llm-config": btoa(JSON.stringify(config)) }
   } catch {
     return {}
@@ -58,6 +56,13 @@ export function SettingsDialog() {
   const [local, setLocal] = useState(config)
   const [open, setOpen] = useState(false)
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle")
+
+  useEffect(() => {
+    if (open) {
+      setLocal(config)
+      setTestStatus("idle")
+    }
+  }, [open, config])
 
   const handleSave = () => {
     setConfig(local)
@@ -86,7 +91,7 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className="p-1 hover:bg-muted rounded-md text-muted-foreground transition-colors">
+      <DialogTrigger className="p-1 hover:bg-muted rounded-md text-muted-foreground transition-colors" aria-label={_t("settings.title")}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
           <circle cx="12" cy="12" r="3" />
@@ -150,8 +155,8 @@ export function SettingsDialog() {
             <Button variant="outline" size="sm" onClick={handleTest} disabled={testStatus === "testing"}>
               {testStatus === "testing" ? _t("settings.testing") : _t("settings.test")}
             </Button>
-            {testStatus === "success" && <span className="text-xs text-emerald-600">Connected!</span>}
-            {testStatus === "error" && <span className="text-xs text-destructive">Failed</span>}
+            {testStatus === "success" && <span className="text-xs text-emerald-600">{_t("settings.connected")}</span>}
+            {testStatus === "error" && <span className="text-xs text-destructive">{_t("settings.failed")}</span>}
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>{_t("settings.cancel")}</Button>
