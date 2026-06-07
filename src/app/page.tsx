@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState, useMemo } from "react"
 import { useShallow } from "zustand/react/shallow"
+import { useTheme } from "@/components/theme-provider"
+import { cn } from "@/lib/utils"
 import { Sidebar } from "@/components/sidebar"
 import { StatusBar } from "@/components/status-bar"
 import { DataGrid } from "@/components/data-grid"
@@ -12,13 +14,18 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { LangToggle } from "@/components/lang-toggle"
 import { SettingsDialog } from "@/components/settings-panel"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { PivotConfigPanel } from "@/components/pivot-config"
+import { PivotGrid } from "@/components/pivot-grid"
 import { useLang } from "@/components/lang-provider"
 import { useUiStore } from "@/stores/ui"
 import { useDatasetStore } from "@/stores/dataset"
 import { useQueryStore, getFilteredRows } from "@/stores/query"
 import { useSqlHistoryStore } from "@/stores/sql-history"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
+import { usePivotStore } from "@/stores/pivot"
 import { formatRowCount } from "@/lib/format"
+import { generatePivotSQL } from "@/lib/pivot-sql"
+import type { PivotConfig } from "@/lib/pivot-sql"
 
 export default function Home() {
   const { _t } = useLang()
@@ -27,19 +34,23 @@ export default function Home() {
     rightPanelOpen,
     rightPanelWidth,
     activeTab,
+    pivotView,
     toggleSidebar,
     toggleRightPanel,
     setRightPanelWidth,
     setActiveTab,
+    setPivotView,
   } = useUiStore(useShallow((s) => ({
     sidebarOpen: s.sidebarOpen,
     rightPanelOpen: s.rightPanelOpen,
     rightPanelWidth: s.rightPanelWidth,
     activeTab: s.activeTab,
+    pivotView: s.pivotView,
     toggleSidebar: s.toggleSidebar,
     toggleRightPanel: s.toggleRightPanel,
     setRightPanelWidth: s.setRightPanelWidth,
     setActiveTab: s.setActiveTab,
+    setPivotView: s.setPivotView,
   })))
   const { selectedTable, schema, selectedDatabase, tables, databases } = useDatasetStore(useShallow((s) => ({
     selectedTable: s.selectedTable,
@@ -73,13 +84,57 @@ export default function Home() {
     loadMore: s.loadMore,
   })))
   const addEntry = useSqlHistoryStore((s) => s.addEntry)
+  const { resolved } = useTheme()
   const [sqlText, setSqlText] = useState("")
+  const [showSqlPreview, setShowSqlPreview] = useState(false)
+  const [previewSql, setPreviewSql] = useState("")
+  const [drilldownData, setDrilldownData] = useState<{
+    columns: string[]
+    rows: unknown[][]
+    isLoading: boolean
+  } | null>(null)
+
+  const pivotStore = usePivotStore(useShallow((s) => ({
+    rows: s.rows,
+    columns: s.columns,
+    indicators: s.indicators,
+    calculatedIndicators: s.calculatedIndicators,
+    filters: s.filters,
+    sort: s.sort,
+    totals: s.totals,
+    resultData: s.resultData,
+    error: s.error,
+    reset: s.reset,
+  })))
+
+  const pivotConfigKey = JSON.stringify({
+    r: pivotStore.rows,
+    c: pivotStore.columns,
+    i: pivotStore.indicators,
+    ci: pivotStore.calculatedIndicators,
+    f: pivotStore.filters,
+    s: pivotStore.sort,
+    t: pivotStore.totals,
+  })
+
+  const pivotConfig = useMemo(() => ({
+    rows: pivotStore.rows,
+    columns: pivotStore.columns,
+    indicators: pivotStore.indicators,
+    calculatedIndicators: pivotStore.calculatedIndicators,
+    filters: pivotStore.filters,
+    sort: pivotStore.sort ?? undefined,
+    totals: pivotStore.totals,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [pivotConfigKey])
 
   useEffect(() => {
     if (selectedTable && selectedDatabase) {
       const q = `${selectedDatabase}.${selectedTable}`
       executeQuery(`SELECT * FROM ${q} LIMIT 1000`, q)
     }
+    pivotStore.reset()
+    setDrilldownData(null)
   }, [selectedTable, selectedDatabase, executeQuery])
 
   const handleSort = useCallback(
@@ -184,6 +239,54 @@ export default function Home() {
       setSqlText(sql)
     },
     []
+  )
+
+  const handlePivotExecute = useCallback(() => {
+    // Pivot store handles the execution internally
+  }, [])
+
+  const handleViewSql = useCallback(() => {
+    const state = usePivotStore.getState()
+    if (!selectedTable || !selectedDatabase) return
+    const config: PivotConfig = {
+      rows: state.rows,
+      columns: state.columns,
+      indicators: state.indicators,
+      calculatedIndicators: state.calculatedIndicators,
+      filters: state.filters,
+      sort: state.sort ?? undefined,
+      totals: state.totals,
+    }
+    const sql = generatePivotSQL(config, selectedTable, selectedDatabase)
+    setPreviewSql(sql)
+    setShowSqlPreview(true)
+  }, [selectedTable, selectedDatabase])
+
+  const handleDrilldown = useCallback(
+    async (params: { dimensionValues: Record<string, unknown>; indicatorKey: string }) => {
+      if (!selectedTable || !selectedDatabase) return
+      setDrilldownData({ columns: [], rows: [], isLoading: true })
+      const conditions = Object.entries(params.dimensionValues)
+        .map(([k, v]) => `\`${k}\` = '${String(v).replace(/'/g, "''")}'`)
+        .join(" AND ")
+      const sql = `SELECT * FROM \`${selectedDatabase}\`.\`${selectedTable}\`${conditions ? ` WHERE ${conditions}` : ""} LIMIT 10000`
+      try {
+        const res = await fetch("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sql, database: selectedDatabase }),
+        })
+        const json = await res.json()
+        if (res.ok) {
+          setDrilldownData({ columns: json.columns, rows: json.rows, isLoading: false })
+        } else {
+          setDrilldownData({ columns: [], rows: [], isLoading: false })
+        }
+      } catch {
+        setDrilldownData({ columns: [], rows: [], isLoading: false })
+      }
+    },
+    [selectedTable, selectedDatabase]
   )
 
   const rightContent = () => {
@@ -301,45 +404,146 @@ export default function Home() {
         </header>
 
         <div className="flex flex-1 overflow-hidden">
-          {sidebarOpen && (
-            <aside className="w-56 shrink-0 overflow-hidden">
-              <Sidebar />
-            </aside>
-          )}
+          <aside
+            className={cn(
+              "shrink-0 overflow-hidden",
+              sidebarOpen ? "w-56" : "w-0"
+            )}
+          >
+            <Sidebar />
+          </aside>
 
           <main className="flex-1 flex flex-col overflow-hidden">
             {selectedTable || data ? (
               <ErrorBoundary>
                 <div className="flex-1 flex flex-col overflow-hidden p-3 gap-2">
-                  {error ? (
-                    <div className="flex-1 flex items-center justify-center">
-                      <div className="text-sm text-destructive">{error}</div>
-                    </div>
-                  ) : data ? (
-                    <DataGrid
-                      columns={data.columns}
-                      rows={filteredRows}
-                      schema={schema}
-                      selectedTable={selectedTable ?? ""}
-                      sortColumn={sort.column}
-                      sortDirection={sort.direction}
-                      onSort={handleSort}
-                      searchQuery={searchQuery}
-                      onSearchChange={setSearchQuery}
-                      loadedRows={loadedRows}
-                      onLoadMore={loadMore}
-                      isLoading={isExecuting}
-                      onDownloadCsv={handleCopyCsv}
-                      onDownloadJson={handleCopyJson}
-                    />
-                  ) : isExecuting ? (
-                    <div className="flex-1 flex items-center justify-center">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <span className="inline-block w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                        {_t("main.loading")} {selectedTable}...
+                  {/* Grid / Pivot tab bar */}
+                  <div className="flex items-center gap-1 shrink-0 border-b border-border">
+                    <button
+                      onClick={() => setPivotView("grid")}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        pivotView === "grid"
+                          ? "text-foreground border-b-2 border-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {_t("tab.grid")}
+                    </button>
+                    <button
+                      onClick={() => setPivotView("pivot")}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                        pivotView === "pivot"
+                          ? "text-foreground border-b-2 border-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {_t("tab.pivot")}
+                    </button>
+                  </div>
+
+                  {pivotView === "grid" ? (
+                    /* Grid View */
+                    error ? (
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="text-sm text-destructive">{error}</div>
+                      </div>
+                    ) : data ? (
+                      <DataGrid
+                        columns={data.columns}
+                        rows={filteredRows}
+                        schema={schema}
+                        selectedTable={selectedTable ?? ""}
+                        sortColumn={sort.column}
+                        sortDirection={sort.direction}
+                        onSort={handleSort}
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        loadedRows={loadedRows}
+                        onLoadMore={loadMore}
+                        isLoading={isExecuting}
+                        onDownloadCsv={handleCopyCsv}
+                        onDownloadJson={handleCopyJson}
+                      />
+                    ) : isExecuting ? (
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <span className="inline-block w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                          {_t("main.loading")} {selectedTable}...
+                        </div>
+                      </div>
+                    ) : null
+                  ) : (
+                    /* Pivot View */
+                    <div className="flex-1 flex gap-2 overflow-hidden">
+                      {/* Pivot Config */}
+                      <div className="w-64 shrink-0 border border-border rounded-md overflow-hidden">
+                        <PivotConfigPanel
+                          schema={schema}
+                          tableName={selectedTable ?? ""}
+                          database={selectedDatabase ?? ""}
+                          onExecute={handlePivotExecute}
+                          onViewSql={handleViewSql}
+                        />
+                      </div>
+                      {/* Pivot Grid */}
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        {pivotStore.error && (
+                          <div className="text-xs text-destructive p-1.5 bg-destructive/10 rounded mb-1 shrink-0">
+                            {pivotStore.error}
+                          </div>
+                        )}
+                        <div className="flex-1 overflow-hidden">
+                          {selectedTable && selectedDatabase ? (
+                            <PivotGrid
+                              key={resolved}
+                              config={pivotConfig}
+                              data={pivotStore.resultData ?? { columns: [], rows: [] }}
+                              schema={schema}
+                              onCellClick={handleDrilldown}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                              请先选择表
+                            </div>
+                          )}
+                        </div>
+                        {/* Drill-down drawer */}
+                        {drilldownData && (
+                          <div className="shrink-0 max-h-[40%] border-t border-border mt-1 pt-1 overflow-hidden flex flex-col">
+                            <div className="flex items-center gap-2 mb-1 shrink-0">
+                              <span className="text-xs font-semibold">{_t("pivot.drilldown")}</span>
+                              {!drilldownData.isLoading && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {drilldownData.rows.length} 行
+                                </span>
+                              )}
+                              <div className="flex-1" />
+                              <button
+                                onClick={() => setDrilldownData(null)}
+                                className="text-xs text-muted-foreground hover:text-foreground"
+                              >
+                                ×
+                              </button>
+                            </div>
+                            {drilldownData.isLoading ? (
+                              <div className="flex items-center justify-center py-4">
+                                <span className="inline-block w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                              </div>
+                            ) : (
+                              <div className="flex-1 overflow-auto">
+                                <DataGrid
+                                  columns={drilldownData.columns}
+                                  rows={drilldownData.rows}
+                                  schema={schema}
+                                  selectedTable={selectedTable ?? ""}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </ErrorBoundary>
             ) : (
@@ -380,6 +584,44 @@ export default function Home() {
 
         <StatusBar />
       </div>
+
+      {/* SQL Preview Dialog */}
+      {showSqlPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background border border-border rounded-lg shadow-lg w-[600px] max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+              <span className="text-sm font-semibold">{_t("pivot.view_sql")}</span>
+              <button
+                onClick={() => setShowSqlPreview(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-xs font-mono whitespace-pre-wrap text-foreground bg-muted/50 p-3 rounded">
+                {previewSql}
+              </pre>
+            </div>
+            <div className="flex justify-end gap-2 px-4 py-2 border-t border-border">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(previewSql)
+                }}
+                className="px-3 py-1 text-xs bg-muted rounded hover:bg-muted/80"
+              >
+                {_t("pivot.copy_sql")}
+              </button>
+              <button
+                onClick={() => setShowSqlPreview(false)}
+                className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90"
+              >
+                {_t("pivot.close")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ErrorBoundary>
   )
 }

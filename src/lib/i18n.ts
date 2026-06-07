@@ -80,6 +80,31 @@ const dict: Record<string, { zh: string; en: string }> = {
   "theme.title": { zh: "当前", en: "Current" },
   // Language
   "lang.switch": { zh: "EN", en: "中文" },
+  // Pivot
+  "tab.grid": { zh: "网格", en: "Grid" },
+  "tab.pivot": { zh: "透视", en: "Pivot" },
+  "pivot.rows": { zh: "行维度", en: "Row Dimensions" },
+  "pivot.columns": { zh: "列维度", en: "Column Dimensions" },
+  "pivot.indicators": { zh: "指标", en: "Indicators" },
+  "pivot.calculated": { zh: "计算指标", en: "Calculated Indicators" },
+  "pivot.add_indicator": { zh: "添加指标", en: "Add Indicator" },
+  "pivot.add_calculated": { zh: "添加计算指标", en: "Add Calculated Indicator" },
+  "pivot.execute": { zh: "执行", en: "Execute" },
+  "pivot.view_sql": { zh: "查看 SQL", en: "View SQL" },
+  "pivot.no_indicators": { zh: "请添加指标", en: "Please add indicators" },
+  "pivot.no_dimensions": { zh: "请添加维度", en: "Please add dimensions" },
+  "pivot.drilldown": { zh: "下钻明细", en: "Drill Down" },
+  "pivot.history": { zh: "透视历史", en: "Pivot History" },
+  "pivot.copy_sql": { zh: "复制 SQL", en: "Copy SQL" },
+  "pivot.close": { zh: "关闭", en: "Close" },
+  "pivot.expression": { zh: "表达式", en: "Expression" },
+  "pivot.visual_mode": { zh: "可视化模式", en: "Visual Mode" },
+  "pivot.text_mode": { zh: "文本模式", en: "Text Mode" },
+  "pivot.format": { zh: "格式", en: "Format" },
+  "pivot.decimals": { zh: "小数位", en: "Decimals" },
+  "pivot.delete": { zh: "删除", en: "Delete" },
+  "pivot.cancel": { zh: "取消", en: "Cancel" },
+  "pivot.save": { zh: "保存", en: "Save" },
 }
 
 export function t(key: string, lang: Lang): string {

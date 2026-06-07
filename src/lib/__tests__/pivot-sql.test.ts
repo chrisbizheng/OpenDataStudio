@@ -1,0 +1,200 @@
+import { describe, it, expect } from "vitest"
+import {
+  generatePivotSQL,
+  getIndicatorSQLMap,
+  type PivotConfig,
+  type PivotIndicator,
+  type CalculatedIndicator,
+} from "../pivot-sql"
+
+describe("getIndicatorSQLMap", () => {
+  it("将指标映射为 SQL 聚合表达式", () => {
+    const config: PivotConfig = {
+      rows: [],
+      columns: [],
+      indicators: [
+        { key: "sales_sum", field: "sales", title: "销售额", aggregation: "SUM" },
+        { key: "count", field: "id", title: "数量", aggregation: "COUNT" },
+      ],
+      calculatedIndicators: [],
+    }
+    const map = getIndicatorSQLMap(config)
+    expect(map["sales_sum"]).toBe("SUM(`sales`)")
+    expect(map["count"]).toBe("COUNT(`id`)")
+  })
+
+  it("支持所有聚合类型", () => {
+    const config: PivotConfig = {
+      rows: [],
+      columns: [],
+      indicators: [
+        { key: "a", field: "x", title: "", aggregation: "SUM" },
+        { key: "b", field: "x", title: "", aggregation: "AVG" },
+        { key: "c", field: "x", title: "", aggregation: "MIN" },
+        { key: "d", field: "x", title: "", aggregation: "MAX" },
+        { key: "e", field: "x", title: "", aggregation: "DISTINCT_COUNT" },
+      ],
+      calculatedIndicators: [],
+    }
+    const map = getIndicatorSQLMap(config)
+    expect(map["a"]).toBe("SUM(`x`)")
+    expect(map["b"]).toBe("AVG(`x`)")
+    expect(map["c"]).toBe("MIN(`x`)")
+    expect(map["d"]).toBe("MAX(`x`)")
+    expect(map["e"]).toBe("COUNT(DISTINCT `x`)")
+  })
+})
+
+describe("generatePivotSQL", () => {
+  it("单指标单行维度生成正确的 GROUP BY", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "sales_sum", field: "sales", title: "销售额", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+    }
+    const sql = generatePivotSQL(config, "orders", "default")
+    expect(sql).toContain("SELECT")
+    expect(sql).toContain("`region`")
+    expect(sql).toContain("SUM(`sales`)")
+    expect(sql).toContain("AS `sales_sum`")
+    expect(sql).toContain("FROM `default`.`orders`")
+    expect(sql).toContain("GROUP BY `region`")
+    expect(sql).toContain("ORDER BY `region`")
+  })
+
+  it("多行多列维度都包含在 GROUP BY 中", () => {
+    const config: PivotConfig = {
+      rows: ["region", "city"],
+      columns: ["product", "category"],
+      indicators: [
+        { key: "sales_sum", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("GROUP BY `region`, `city`, `product`, `category`")
+  })
+
+  it("计算指标作为 SELECT 表达式", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "sales_sum", field: "sales", title: "", aggregation: "SUM" },
+        { key: "cost_sum", field: "cost", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [
+        {
+          key: "profit_rate",
+          title: "利润率",
+          expression: "([[sales_sum]] - [[cost_sum]]) / [[sales_sum]]",
+          dependIndicatorKeys: ["sales_sum", "cost_sum"],
+        },
+      ],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("AS `profit_rate`")
+    expect(sql).toContain("SUM(`sales`)")
+    expect(sql).toContain("SUM(`cost`)")
+  })
+
+  it("链式计算指标按拓扑排序", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "a", field: "x", title: "", aggregation: "SUM" },
+        { key: "b", field: "y", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [
+        {
+          key: "c",
+          title: "c",
+          expression: "[[a]] + [[b]]",
+          dependIndicatorKeys: ["a", "b"],
+        },
+        {
+          key: "d",
+          title: "d",
+          expression: "[[c]] * 2",
+          dependIndicatorKeys: ["c"],
+        },
+      ],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    const cPos = sql.indexOf("AS `c`")
+    const dPos = sql.indexOf("AS `d`")
+    expect(cPos).toBeLessThan(dPos)
+  })
+
+  it("过滤条件生成 WHERE 子句", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+      filters: [{ field: "status", op: "=", value: "active" }],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("WHERE `status` = 'active'")
+  })
+
+  it("排序条件生成 ORDER BY", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+      sort: { field: "s", direction: "desc" },
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("ORDER BY `s` DESC")
+  })
+
+  it("无指标时生成空 SQL", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [],
+      calculatedIndicators: [],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).not.toContain("SUM")
+    expect(sql).not.toContain("AVG")
+  })
+
+  it("IN 过滤条件正确生成", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+      filters: [{ field: "region", op: "IN", value: ["华东", "华南"] }],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("IN ('华东', '华南')")
+  })
+
+  it("LIKE 过滤条件正确生成", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+      filters: [{ field: "name", op: "LIKE", value: "%test%" }],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("LIKE '%test%'")
+  })
+})
