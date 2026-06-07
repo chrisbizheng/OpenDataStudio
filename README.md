@@ -2,6 +2,8 @@
 
 A modern ClickHouse data management and visualization platform built with Next.js.
 
+**[English](README.md)** | **[中文](README.zh-CN.md)**
+
 ![Next.js](https://img.shields.io/badge/Next.js-16.2-black)
 ![React](https://img.shields.io/badge/React-19.2-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
