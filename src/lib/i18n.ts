@@ -44,6 +44,7 @@ const dict: Record<string, { zh: string; en: string }> = {
   "panel.saved_count": { zh: "已存", en: "saved" },
   "panel.templates": { zh: "个模板", en: "templates" },
   // Agent
+  "agent.try_asking": { zh: "试试问：", en: "Try asking:" },
   "agent.placeholder": { zh: "提问数据问题...", en: "Ask a question about your data..." },
   "agent.send": { zh: "发送", en: "Send" },
   "agent.thinking": { zh: "思考中...", en: "Thinking..." },

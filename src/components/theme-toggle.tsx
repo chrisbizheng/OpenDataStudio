@@ -5,11 +5,15 @@ import { useTheme } from "./theme-provider"
 export function ThemeToggle() {
   const { theme, setTheme, resolved } = useTheme()
 
+  const toggle = () => {
+    setTheme(resolved === "dark" ? "light" : "dark")
+  }
+
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")}
+      onClick={toggle}
       className="p-1 hover:bg-muted rounded-md text-muted-foreground transition-colors"
-      title={`Current: ${theme} (${resolved})`}
+      title={`${theme} (${resolved})`}
     >
       {resolved === "dark" ? (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

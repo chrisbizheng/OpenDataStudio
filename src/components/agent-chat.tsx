@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useLlmStore } from "./settings-panel"
 import { useLang } from "@/components/lang-provider"
 
@@ -15,13 +15,46 @@ interface Message {
 
 interface AgentChatProps {
   tableName?: string | null
-  schema?: { name: string; type: string }[]
+  schema?: { name: string; type: string; comment?: string }[]
   selectedDatabase?: string | null
   onSqlGenerated?: (sql: string) => void
 }
 
+const NUM_KEYWORDS = ["amount", "total", "price", "quantity", "revenue", "cost", "sales", "value", "count", "volume", "budget", "profit", "sum", "balance", "fee", "rate"]
+
+function suggestQuestions(schema: { name: string; type: string; comment?: string }[], lang: string): string[] {
+  const suggestions: string[] = []
+  const nums = schema.filter((c) => /^(Int|UInt|Float|Decimal)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
+  const strs = schema.filter((c) => /^(String|FixedString|LowCardinality)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
+  const dates = schema.filter((c) => /^(Date|DateTime)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
+
+  const isZh = lang === "zh"
+
+  if (nums.length > 0 && strs.length > 0) {
+    const metric = nums.find((c) => NUM_KEYWORDS.some((k) => c.name.toLowerCase().includes(k))) || nums[0]
+    const dim = strs[0]
+    suggestions.push(isZh
+      ? `按 ${dim.name} 分组显示 ${metric.name} 前 10`
+      : `Show top 10 by ${metric.name} grouped by ${dim.name}`)
+  }
+  if (nums.length > 0) {
+    const metric = nums.find((c) => NUM_KEYWORDS.some((k) => c.name.toLowerCase().includes(k))) || nums[0]
+    suggestions.push(isZh ? `${metric.name} 的平均值是多少？` : `What is the average ${metric.name}?`)
+  }
+  if (strs.length > 0) {
+    suggestions.push(isZh ? `列出所有不同的 ${strs[0].name}` : `List distinct ${strs[0].name}`)
+  }
+  if (dates.length > 0) {
+    suggestions.push(isZh ? `按 ${dates[0].name} 显示趋势` : `Show trend over ${dates[0].name}`)
+  }
+  if (schema.length > 0) {
+    suggestions.push(isZh ? "生成此表的数据画像" : "Generate a data profile for this table")
+  }
+  return suggestions.slice(0, 5)
+}
+
 export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated }: AgentChatProps) {
-  const { _t } = useLang()
+  const { _t, lang } = useLang()
   const { config } = useLlmStore()
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -31,11 +64,14 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
   ])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [thinkingExpanded, setThinkingExpanded] = useState(true)
   const chatRef = useRef<HTMLDivElement>(null)
+
+  const suggestions = useMemo(() => schema && schema.length > 0 ? suggestQuestions(schema, lang) : [], [schema, lang])
 
   useEffect(() => {
     chatRef.current?.scrollTo(0, chatRef.current.scrollHeight)
-  }, [messages])
+  }, [messages, isLoading])
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return
@@ -45,6 +81,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
     setMessages(updated)
     setInput("")
     setIsLoading(true)
+    setThinkingExpanded(true)
 
     try {
       const llmConfig = localStorage.getItem("llm-config")
@@ -54,10 +91,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
       if (!llmConfig || !llmConfig.apiKey) {
         setMessages((prev) => [
           ...prev,
-          {
-            role: "assistant",
-            content: _t("agent.not_configured"),
-          },
+          { role: "assistant", content: _t("agent.not_configured") },
         ])
         setIsLoading(false)
         return
@@ -111,6 +145,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
       ])
     } finally {
       setIsLoading(false)
+      setThinkingExpanded(false)
     }
   }
 
@@ -137,9 +172,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`text-xs ${
-              msg.role === "user" ? "text-right" : "text-left"
-            }`}
+            className={`text-xs ${msg.role === "user" ? "text-right" : "text-left"}`}
           >
             {msg.role === "user" ? (
               <div className="inline-block bg-primary/10 text-foreground rounded-lg px-3 py-1.5 max-w-[85%] text-left">
@@ -194,11 +227,38 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
           </div>
         ))}
         {isLoading && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-            <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-            <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-            <span className="ml-1">{_t("agent.thinking")}</span>
+          <div className="text-xs">
+            <button
+              onClick={() => setThinkingExpanded(!thinkingExpanded)}
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+            >
+              <span className="text-[10px]">{thinkingExpanded ? "▼" : "▶"}</span>
+              <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+              <span className="ml-1">{_t("agent.thinking")}</span>
+            </button>
+            {thinkingExpanded && (
+              <div className="mt-2 text-[10px] text-muted-foreground/60 space-y-1 pl-4 border-l-2 border-muted">
+                <div>1. Calling LLM...</div>
+                <div>2. Executing query...</div>
+                <div>3. Analyzing results...</div>
+              </div>
+            )}
+          </div>
+        )}
+        {!isLoading && messages.length === 1 && tableName && suggestions.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
+            {suggestions.map((q, i) => (
+              <button
+                key={i}
+                onClick={() => sendMessage(q)}
+                className="block w-full text-left text-[10px] px-2 py-1.5 rounded bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors truncate"
+              >
+                {q}
+              </button>
+            ))}
           </div>
         )}
       </div>

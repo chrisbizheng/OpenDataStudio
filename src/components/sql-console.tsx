@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useLang } from "@/components/lang-provider"
 import CodeMirror from "@uiw/react-codemirror"
-import { sql as sqlLang } from "@codemirror/lang-sql"
-import { oneDark } from "@codemirror/theme-one-dark"
+import { sql, keywordCompletionSource } from "@codemirror/lang-sql"
+import { autocompletion, acceptCompletion, moveCompletionSelection } from "@codemirror/autocomplete"
+import { keymap } from "@codemirror/view"
+import { githubLight, githubDark } from "@uiw/codemirror-theme-github"
+import { ClickHouse } from "@/lib/ch-dialect"
+import { createChCompletionSource } from "@/lib/ch-completion"
 
 interface SqlConsoleProps {
   sql: string
@@ -17,7 +21,7 @@ interface SqlConsoleProps {
 }
 
 export function SqlConsole({
-  sql,
+  sql: sqlText,
   onSqlChange,
   onExecute,
   onSave,
@@ -32,10 +36,10 @@ export function SqlConsole({
     (e: React.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault()
-        onExecute(sql)
+        onExecute(sqlText)
       }
     },
-    [sql, onExecute]
+    [sqlText, onExecute]
   )
 
   const insertSelectLimit = useCallback(() => {
@@ -50,33 +54,69 @@ export function SqlConsole({
     }
   }, [tableName, selectedDatabase, onSqlChange, onExecute])
 
-  const extensions = useMemo(() => [sqlLang()], [])
+  const completionSource = useMemo(
+    () => createChCompletionSource({
+      databases: selectedDatabase ? [selectedDatabase] : [],
+      tableNames: {
+        current: tableName ? [tableName] : [],
+        all: tableName && selectedDatabase ? [{ db: selectedDatabase, table: tableName }] : [],
+      },
+      tablesForDb: () => tableName ? [tableName] : [],
+      columnsFor: () => [],
+    }),
+    [selectedDatabase, tableName]
+  )
+
+  const extensions = useMemo(() => [
+    sql({ dialect: ClickHouse }),
+    autocompletion({
+      activateOnTyping: true,
+      override: [
+        completionSource,
+        keywordCompletionSource(ClickHouse, true),
+      ],
+    }),
+    keymap.of([
+      { key: "Space", run: acceptCompletion },
+      { key: "Tab", run: moveCompletionSelection(true) },
+      { key: "Shift-Tab", run: moveCompletionSelection(false) },
+    ]),
+  ], [completionSource])
+
+  const [isDark, setIsDark] = useState(true)
+
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
+    check()
+    const obs = new MutationObserver(check)
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => obs.disconnect()
+  }, [])
+
+  const activeTheme = isDark ? githubDark : githubLight
 
   return (
     <div className="flex flex-col h-full">
       <style>{`
-        .cm-editor, .cm-scroller, .cm-content, .cm-gutters {
-          background: transparent !important;
-        }
         .cm-editor { height: 100% !important; }
         .cm-scroller { overflow: auto !important; }
       `}</style>
       <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
         <button
-          onClick={() => onExecute(sql)}
-          disabled={isExecuting || !sql.trim()}
+          onClick={() => onExecute(sqlText)}
+          disabled={isExecuting || !sqlText.trim()}
           className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {isExecuting ? (
-            <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <span className="inline-block w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
           ) : (
             "▶"
           )}
           {_t("sql.run")}
         </button>
         <button
-          onClick={() => onSave(sql)}
-          disabled={!sql.trim()}
+          onClick={() => onSave(sqlText)}
+          disabled={!sqlText.trim()}
           className="px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground rounded hover:bg-muted"
           title="Save current query"
         >
@@ -94,14 +134,14 @@ export function SqlConsole({
       </div>
       <div className="flex-1 overflow-auto" onClick={() => setIsFocused(true)}>
         <CodeMirror
-          value={sql}
+          value={sqlText}
           onChange={onSqlChange}
           extensions={extensions}
-          theme={oneDark}
+          theme={activeTheme}
           height="100%"
-          basicSetup={{ lineNumbers: false, foldGutter: false, indentOnInput: true, autocompletion: false }}
+          basicSetup={{ lineNumbers: false, foldGutter: false, indentOnInput: true, autocompletion: true }}
           placeholder={_t("sql.placeholder")}
-          className="text-xs [&_.cm-editor]:h-full [&_.cm-editor,&_.cm-scroller,&_.cm-content,&_.cm-gutters]:!bg-transparent [&_.cm-content]:font-mono"
+          className="text-xs [&_.cm-editor]:h-full [&_.cm-content]:font-mono"
         />
       </div>
     </div>

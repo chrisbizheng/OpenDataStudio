@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 
 type Theme = "light" | "dark" | "system"
 
@@ -44,15 +44,19 @@ function applyTheme(theme: Theme) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system")
   const [mounted, setMounted] = useState(false)
+  const applied = useRef(false)
 
   useEffect(() => {
-    const stored = getStoredTheme()
-    setThemeState(stored)
-    applyTheme(stored)
+    if (!applied.current) {
+      const stored = getStoredTheme()
+      setThemeState(stored)
+      applyTheme(stored)
+    }
     setMounted(true)
   }, [])
 
   const setTheme = (t: Theme) => {
+    applied.current = true
     setThemeState(t)
     localStorage.setItem("theme", t)
     applyTheme(t)
