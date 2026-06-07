@@ -46,7 +46,7 @@ Production-ready Docker deployment, comprehensive error handling across all surf
         CLICKHOUSE_HOST: clickhouse
         CLICKHOUSE_PORT: 8123
         CLICKHOUSE_USER: default
-        CLICKHOUSE_PASSWORD: afUm4SOHIvGZnhnf
+        CLICKHOUSE_PASSWORD: your_clickhouse_password
         CLICKHOUSE_DB: default
     clickhouse:
       image: clickhouse/clickhouse-server:latest
@@ -56,7 +56,7 @@ Production-ready Docker deployment, comprehensive error handling across all surf
       environment:
         CLICKHOUSE_DB: default
         CLICKHOUSE_USER: default
-        CLICKHOUSE_PASSWORD: afUm4SOHIvGZnhnf
+        CLICKHOUSE_PASSWORD: your_clickhouse_password
       volumes:
         - clickhouse_data:/var/lib/clickhouse
   volumes:

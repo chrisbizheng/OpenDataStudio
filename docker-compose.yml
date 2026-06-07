@@ -7,7 +7,7 @@ services:
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: afUm4SOHIvGZnhnf
+      CLICKHOUSE_PASSWORD: your_clickhouse_password
       CLICKHOUSE_DB: default
       NODE_ENV: production
 
@@ -19,7 +19,7 @@ services:
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: afUm4SOHIvGZnhnf
+      CLICKHOUSE_PASSWORD: your_clickhouse_password
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./init-db:/docker-entrypoint-initdb.d

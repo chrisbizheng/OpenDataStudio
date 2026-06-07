@@ -48,7 +48,7 @@ npm install @clickhouse/client zustand next-themes
   CLICKHOUSE_HOST=127.0.0.1
   CLICKHOUSE_PORT=8123
   CLICKHOUSE_USER=default
-  CLICKHOUSE_PASSWORD=afUm4SOHIvGZnhnf
+  CLICKHOUSE_PASSWORD=your_clickhouse_password
   CLICKHOUSE_DB=default
   ```
 

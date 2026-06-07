@@ -229,7 +229,7 @@ Three-panel layout using CSS Grid:
 CLICKHOUSE_HOST=127.0.0.1
 CLICKHOUSE_PORT=8123
 CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=afUm4SOHIvGZnhnf
+CLICKHOUSE_PASSWORD=your_clickhouse_password
 CLICKHOUSE_DB=default
 ```
 
@@ -349,7 +349,7 @@ COPY --from=base /app/package.json ./package.json
 ENV CLICKHOUSE_HOST=clickhouse
 ENV CLICKHOUSE_PORT=8123
 ENV CLICKHOUSE_USER=default
-ENV CLICKHOUSE_PASSWORD=afUm4SOHIvGZnhnf
+ENV CLICKHOUSE_PASSWORD=your_clickhouse_password
 ENV CLICKHOUSE_DB=default
 ENV NODE_ENV=production
 
