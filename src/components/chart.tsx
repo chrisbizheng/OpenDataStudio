@@ -27,7 +27,7 @@ interface ChartConfig {
 interface ChartProps {
   data: Record<string, unknown>[]
   config: ChartConfig
-  onClick?: (item: { key: string; value: number; row: Record<string, unknown> }) => void
+  onClick?: (item: { key: string; value: number; row: Record<string, unknown>; seriesName?: string }) => void
   onBrushSelect?: (items: Record<string, unknown>[]) => void
 }
 
@@ -388,8 +388,10 @@ export function Chart({ data, config, onClick, onBrushSelect }: ChartProps) {
       const key = p.name ?? ""
       const rawVal = Array.isArray(p.value) ? p.value[p.value.length - 1] : p.value
       const value = Number(rawVal) || 0
-      const row = p.data ?? (p.dataIndex !== undefined ? chartData[p.dataIndex] ?? {} : {})
-      onClick({ key, value, row })
+      const row = p.data && typeof p.data === "object" && !Array.isArray(p.data)
+        ? p.data
+        : (p.dataIndex !== undefined ? chartData[p.dataIndex] ?? {} : {})
+      onClick({ key, value, row, seriesName: p.seriesName })
     })
 
     // Brush select event

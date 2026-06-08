@@ -101,8 +101,8 @@ export default function Home() {
     totals: s.totals,
     resultData: s.resultData,
     error: s.error,
-    reset: s.reset,
   })))
+  const resetPivot = usePivotStore((s) => s.reset)
 
   const pivotConfigKey = JSON.stringify({
     r: pivotStore.rows,
@@ -129,9 +129,9 @@ export default function Home() {
     if (selectedTable && selectedDatabase) {
       executeQuery(buildSelectSql(selectedDatabase, selectedTable), `${selectedDatabase}.${selectedTable}`)
     }
-    pivotStore.reset()
-    setDrilldownData(null)
-  }, [selectedTable, selectedDatabase, executeQuery])
+    resetPivot()
+    queueMicrotask(() => setDrilldownData(null))
+  }, [selectedTable, selectedDatabase, executeQuery, resetPivot])
 
   const handleSort = useCallback(
     (column: string) => {
@@ -202,7 +202,7 @@ export default function Home() {
         addSavedQuery(name.trim(), sql)
       }
     },
-    [addSavedQuery]
+    [addSavedQuery, _t]
   )
 
   const handleSelectSavedSql = useCallback(

@@ -19,6 +19,8 @@ import { appLog, getTraceId } from "@/lib/client-logger"
 import { parseSSEStream } from "@/lib/sse-parser"
 import { extractField, stripMarkdownTables } from "@/lib/llm-response"
 import { suggestQuestions, suggestFollowUp } from "@/lib/suggestions"
+import { suggestDeepDiveDirections, type DeepDiveItem } from "@/lib/deep-dive-directions"
+import { getChartNodeContext } from "@/lib/chart-node-context"
 import type { Message } from "@/lib/agent-types"
 
 interface AgentChatProps {
@@ -47,8 +49,15 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
   const [isLoading, setIsLoading] = useState(false)
   const [clickedChart, setClickedChart] = useState<{
     messageIndex: number
-    item: { key: string; value: number; row: Record<string, unknown> }
+    item: DeepDiveItem
   } | null>(null)
+  const [deepDiveOpen, setDeepDiveOpen] = useState(false)
+  const [aiDirections, setAiDirections] = useState<{ label: string; prompt: string }[] | null>(null)
+  const [isGeneratingDirections, setIsGeneratingDirections] = useState(false)
+  const [aiInitialQuestions, setAiInitialQuestions] = useState<string[] | null>(null)
+  const [aiFollowUpQuestions, setAiFollowUpQuestions] = useState<string[] | null>(null)
+  const [isGeneratingInitialQuestions, setIsGeneratingInitialQuestions] = useState(false)
+  const [isGeneratingFollowUpQuestions, setIsGeneratingFollowUpQuestions] = useState(false)
   const chatRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -68,6 +77,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
     if (isLoading) return
     const next = storedConversation && storedConversation.length > 0 ? storedConversation : [welcomeMessage]
     setMessages(next)
+    setAiInitialQuestions(null)
+    setAiFollowUpQuestions(null)
     prevCountRef.current = next.length
   }, [chatKey, storedConversation, welcomeMessage, isLoading])
 
@@ -95,6 +106,9 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
 
   const sendMessage = async (text: string, baseMessages?: Message[]) => {
     if (!text.trim() || isLoading) return
+
+    setAiInitialQuestions(null)
+    setAiFollowUpQuestions(null)
 
     const prevMessages = baseMessages ?? messages
     const userMsg: Message = { role: "user", content: text }
@@ -242,6 +256,90 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
     abortRef.current?.abort()
   }
 
+  const generateAiDirections = async (msg: Message, item: DeepDiveItem, localDirections: { label: string; prompt: string }[]) => {
+    if (!msg.visualization || !msg.columns) return
+    setIsGeneratingDirections(true)
+    try {
+      const raw = localStorage.getItem("llm-config")
+      const llmConfig = raw ? JSON.parse(raw).state?.config : null
+      if (!llmConfig || !llmConfig.apiKey) return
+      const traceId = getTraceId()
+      const res = await fetch("/api/agent/directions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-llm-config": btoa(JSON.stringify(llmConfig)),
+          "x-trace-id": traceId,
+        },
+        body: JSON.stringify({
+          context: {
+            currentTable: tableName,
+            schema: schema ?? [],
+            database: selectedDatabase,
+          },
+          clicked: item,
+          visualization: {
+            type: msg.visualization.type || "bar",
+            xKey: msg.visualization.config.xKey,
+            yKey: msg.visualization.config.yKey,
+            series: msg.visualization.config.series,
+          },
+          columns: msg.columns,
+          localDirections,
+          lang,
+        }),
+      })
+      if (!res.ok) return
+      const json = await res.json() as { directions?: { label: string; prompt: string }[] }
+      if (json.directions?.length) setAiDirections(json.directions.slice(0, 4))
+    } finally {
+      setIsGeneratingDirections(false)
+    }
+  }
+
+  const generateAiQuestions = async (input: {
+    localQuestions: string[]
+    previousQuestion?: string
+    sql?: string
+    columns?: string[]
+    target: "initial" | "followUp"
+  }) => {
+    const setLoading = input.target === "initial" ? setIsGeneratingInitialQuestions : setIsGeneratingFollowUpQuestions
+    const setQuestions = input.target === "initial" ? setAiInitialQuestions : setAiFollowUpQuestions
+    setLoading(true)
+    try {
+      const raw = localStorage.getItem("llm-config")
+      const llmConfig = raw ? JSON.parse(raw).state?.config : null
+      if (!llmConfig || !llmConfig.apiKey) return
+      const traceId = getTraceId()
+      const res = await fetch("/api/agent/questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-llm-config": btoa(JSON.stringify(llmConfig)),
+          "x-trace-id": traceId,
+        },
+        body: JSON.stringify({
+          context: {
+            currentTable: tableName,
+            schema: schema ?? [],
+            database: selectedDatabase,
+          },
+          localQuestions: input.localQuestions,
+          previousQuestion: input.previousQuestion,
+          sql: input.sql,
+          columns: input.columns,
+          lang,
+        }),
+      })
+      if (!res.ok) return
+      const json = await res.json() as { questions?: string[] }
+      if (json.questions?.length) setQuestions(json.questions.slice(0, 5))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const generateProfile = async () => {
     if (!tableName) return
     await sendMessage(
@@ -265,6 +363,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             onClick={() => {
               clearStoredConversation(chatKey)
               setMessages([welcomeMessage])
+              setAiInitialQuestions(null)
+              setAiFollowUpQuestions(null)
               prevCountRef.current = 1
             }}
             disabled={isLoading || messages.length <= 1}
@@ -394,7 +494,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                     </div>
                   </div>
                 )}
-                {msg.content && msg.content !== "Done." && (
+                {msg.content && msg.content !== "Done." && !(i === 0 && msg.role === "assistant" && messages.length > 1) && (
                   <div className="text-foreground leading-relaxed text-xs space-y-1.5 [&_p]:my-0 [&_ul]:my-1 [&_ul]:pl-4 [&_ul]:list-disc [&_ol]:my-1 [&_ol]:pl-4 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_strong]:font-semibold [&_strong]:text-foreground [&_em]:italic [&_a]:text-primary [&_a]:underline [&_code]:bg-muted [&_code]:px-1 [&_code]:py-px [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:text-[10px] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_blockquote]:border-l-2 [&_blockquote]:border-muted [&_blockquote]:pl-2 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_hr]:my-2 [&_hr]:border-border">
                     <ReactMarkdown>{stripMarkdownTables(msg.content)}</ReactMarkdown>
                     {isLoading && i === messages.length - 1 && (
@@ -421,30 +521,88 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                         series: msg.visualization.config.series,
                         title: msg.visualization.config.title,
                       }}
-                      onClick={(item) => setClickedChart({ messageIndex: i, item })}
+                      onClick={(item) => {
+                        setClickedChart({ messageIndex: i, item })
+                        setDeepDiveOpen(false)
+                        setAiDirections(null)
+                      }}
                     />
-                    {clickedChart?.messageIndex === i && (
+                    {clickedChart?.messageIndex === i && (() => {
+                      const nodeContext = getChartNodeContext({ item: clickedChart.item, visualization: msg.visualization!, lang })
+                      return (
                       <div className="border border-border rounded p-2 space-y-2 animate-fade-slide-in">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="font-semibold text-foreground">{clickedChart.item.key}</span>
-                          <span className="text-muted-foreground">→</span>
-                          <span className="font-mono text-foreground">
-                            {clickedChart.item.value.toLocaleString()}
-                          </span>
-                          <div className="flex-1" />
-                          <button
-                            onClick={() => {
-                              setClickedChart(null)
-                              const followUp = lang === "zh"
-                                ? `详细分析 "${clickedChart.item.key}" 的数据，查询明细并列出前 20 行`
-                                : `Analyze "${clickedChart.item.key}" in detail, query raw data and show top 20 rows`
-                              sendMessage(followUp)
-                            }}
-                            className="text-[10px] text-primary hover:underline shrink-0"
-                          >
-                            {lang === "zh" ? "AI 深度分析" : "AI Deep Dive"}
-                          </button>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-start gap-2">
+                            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-semibold text-foreground min-w-0">
+                              {nodeContext.dimensions.map(([field, value], di, arr) => (
+                                <span key={`${field}-${di}`} className="inline-flex items-center gap-1">
+                                  <span>{field}</span>
+                                  <span className="text-muted-foreground">=</span>
+                                  <span>{String(value ?? "∅")}</span>
+                                  {di < arr.length - 1 && <span className="text-muted-foreground">·</span>}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="flex-1" />
+                            <button
+                              onClick={() => setDeepDiveOpen((open) => !open)}
+                              className="text-[10px] text-primary hover:underline shrink-0"
+                            >
+                              {lang === "zh" ? "AI 深度分析" : "AI Deep Dive"}
+                            </button>
+                          </div>
+                          <div className="font-mono text-foreground">
+                            {nodeContext.metricLabel} = {nodeContext.metricValue}
+                          </div>
                         </div>
+                        {deepDiveOpen && (() => {
+                          const localDirections = suggestDeepDiveDirections({
+                            item: clickedChart.item,
+                            visualizationConfig: {
+                              type: msg.visualization!.type || "bar",
+                              xKey: msg.visualization!.config.xKey,
+                              yKey: msg.visualization!.config.yKey,
+                              series: msg.visualization!.config.series,
+                            },
+                            columns: msg.columns!,
+                            rowCount: msg.rows!.length,
+                            schema: schema ?? [],
+                            lang,
+                          })
+                          const directions = aiDirections ?? localDirections
+                          if (directions.length === 0) return null
+                          return (
+                            <div className="space-y-1 animate-fade-slide-in">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] text-muted-foreground">
+                                  {aiDirections ? (lang === "zh" ? "AI 推荐方向" : "AI suggested directions") : (lang === "zh" ? "推荐方向" : "Suggested directions")}
+                                </span>
+                                <button
+                                  onClick={() => generateAiDirections(msg, clickedChart.item, localDirections)}
+                                  disabled={isGeneratingDirections}
+                                  className="text-[10px] text-primary hover:underline disabled:opacity-50"
+                                >
+                                  {isGeneratingDirections ? (lang === "zh" ? "生成中..." : "Generating...") : (lang === "zh" ? "AI 推荐方向" : "AI suggest")}
+                                </button>
+                              </div>
+                              {directions.map((direction, di) => (
+                                <button
+                                  key={di}
+                                  onClick={() => {
+                                    setDeepDiveOpen(false)
+                                    setAiDirections(null)
+                                    setClickedChart(null)
+                                    sendMessage(direction.prompt)
+                                  }}
+                                  className="flex items-center gap-1.5 w-full text-left text-[10px] px-2 py-1.5 rounded bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  <span className="text-primary shrink-0">›</span>
+                                  <span className="truncate">{direction.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                         <div className="overflow-x-auto border border-border rounded">
                           <table className="w-full text-[10px] border-collapse">
                             <thead>
@@ -457,7 +615,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                               </tr>
                             </thead>
                             <tbody>
-                              {msg.rows
+                              {msg.rows!
                                 .filter((row) => {
                                   const xKey = msg.visualization!.config.xKey
                                   const idx = msg.columns!.indexOf(xKey)
@@ -481,7 +639,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                           </table>
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
                   </>
                 )}
                 {msg.rows && msg.columns && msg.rows.length > 0 && (
@@ -557,11 +716,21 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                   if (!userMsg || userMsg.role !== "user") return null
                   const hasLaterUserMsg = messages.slice(i + 1).some((m) => m.role === "user")
                   if (hasLaterUserMsg) return null
-                  const followUps = suggestFollowUp(userMsg.content, msg.sql, msg.columns, lang)
+                  const localFollowUps = suggestFollowUp(userMsg.content, msg.sql, msg.columns, lang)
+                  const followUps = aiFollowUpQuestions ?? localFollowUps
                   if (followUps.length === 0) return null
                   return (
                     <div className="space-y-1 mt-3 pt-2 border-t border-border/50 animate-fade-slide-in">
-                      <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
+                        <button
+                          onClick={() => generateAiQuestions({ localQuestions: localFollowUps, previousQuestion: userMsg.content, sql: msg.sql, columns: msg.columns, target: "followUp" })}
+                          disabled={isGeneratingFollowUpQuestions}
+                          className="text-[10px] text-primary hover:underline disabled:opacity-50"
+                        >
+                          {isGeneratingFollowUpQuestions ? (lang === "zh" ? "生成中..." : "Generating...") : (lang === "zh" ? "AI 推荐问题" : "AI suggest")}
+                        </button>
+                      </div>
                       {followUps.map((q, fi) => (
                         <button
                           key={fi}
@@ -579,10 +748,21 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             )}
           </div>
         ))}
-        {!isLoading && messages.length === 1 && tableName && suggestions.length > 0 && (
+        {!isLoading && messages.length === 1 && tableName && suggestions.length > 0 && (() => {
+          const initialQuestions = aiInitialQuestions ?? suggestions
+          return (
           <div className="space-y-1.5 mt-2 animate-fade-slide-in">
-            <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
-            {suggestions.map((q, i) => (
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
+              <button
+                onClick={() => generateAiQuestions({ localQuestions: suggestions, target: "initial" })}
+                disabled={isGeneratingInitialQuestions}
+                className="text-[10px] text-primary hover:underline disabled:opacity-50"
+              >
+                {isGeneratingInitialQuestions ? (lang === "zh" ? "生成中..." : "Generating...") : (lang === "zh" ? "AI 推荐问题" : "AI suggest")}
+              </button>
+            </div>
+            {initialQuestions.map((q, i) => (
               <button
                 key={i}
                 onClick={() => sendMessage(q)}
@@ -593,7 +773,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
               </button>
             ))}
           </div>
-        )}
+          )
+        })()}
       </div>
       <div className="border-t border-border p-2 shrink-0">
         <div className="flex gap-2">

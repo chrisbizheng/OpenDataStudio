@@ -72,17 +72,13 @@ function formatDecimal(value: number, thousands: boolean): string {
 }
 
 function DateCell({ value }: { value: string }) {
-  try {
-    const d = new Date(value)
-    if (isNaN(d.getTime())) return <span>{value}</span>
-    return (
-      <span className="text-muted-foreground">
-        {d.toLocaleString()}
-      </span>
-    )
-  } catch {
-    return <span>{value}</span>
-  }
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return <span>{value}</span>
+  return (
+    <span className="text-muted-foreground">
+      {d.toLocaleString()}
+    </span>
+  )
 }
 
 function ArrayCell({ value }: { value: unknown[] }) {

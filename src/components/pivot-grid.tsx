@@ -262,7 +262,7 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
   if (data.rows.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        配置维度和指标后点击"执行"
+        配置维度和指标后点击&quot;执行&quot;
       </div>
     )
   }

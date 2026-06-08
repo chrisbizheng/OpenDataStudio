@@ -43,7 +43,7 @@ export function scanFromJoinAliases(sql: string): Map<string, TableEntry> {
     }
 
     if ((inFrom || inJoin) && t.type === "word") {
-      let raw = t.value;
+      const raw = t.value;
       let alias: string | undefined;
       // tbl [AS] alias
       const remaining = tokens.slice(i + 1);
