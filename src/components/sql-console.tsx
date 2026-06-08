@@ -6,7 +6,7 @@ import CodeMirror from "@uiw/react-codemirror"
 import { sql, keywordCompletionSource } from "@codemirror/lang-sql"
 import { autocompletion, acceptCompletion, moveCompletionSelection } from "@codemirror/autocomplete"
 import { keymap } from "@codemirror/view"
-import { githubLight, githubDark } from "@uiw/codemirror-theme-github"
+import { vscodeDark, vscodeLight } from "@/lib/vscode-theme-override"
 import { ClickHouse } from "@/lib/ch-dialect"
 import { createChCompletionSource } from "@/lib/ch-completion"
 
@@ -92,7 +92,7 @@ export function SqlConsole({
     return () => obs.disconnect()
   }, [])
 
-  const activeTheme = isDark ? githubDark : githubLight
+  const activeTheme = isDark ? vscodeDark : vscodeLight
 
   return (
     <div className="flex flex-col h-full">

@@ -106,6 +106,8 @@ export async function query(
   const rows = (await result.json()) as Record<string, unknown>[]
   const columns = rows.length > 0 ? Object.keys(rows[0]) : []
 
+  console.log("[query]", { sql: sql.slice(0, 200), rows: rows.length, cols: columns.length, elapsed })
+
   return {
     columns,
     rows: rows.map((r) => columns.map((c) => r[c])),

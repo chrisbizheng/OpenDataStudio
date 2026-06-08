@@ -78,6 +78,8 @@ export function PivotConfigPanel({
   } = usePivotStore()
 
   const { entries: historyEntries, addEntry } = usePivotHistoryStore()
+  const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
+  const dbEntries = historyEntries.filter((e) => e.database === selectedDatabase)
 
   const dimensionCandidates = useMemo(
     () => schema.filter((c) => isDimensionType(c.type)),
@@ -294,10 +296,10 @@ export function PivotConfigPanel({
         </div>
 
         {/* History */}
-        {historyEntries.length > 0 && (
-          <Section title={_t("pivot.history")} count={historyEntries.length}>
+        {dbEntries.length > 0 && (
+          <Section title={_t("pivot.history")} count={dbEntries.length}>
             <div className="space-y-0.5 max-h-32 overflow-auto">
-              {historyEntries.slice(0, 10).map((entry) => (
+              {dbEntries.slice(0, 10).map((entry) => (
                 <button
                   key={entry.id}
                   onClick={() => {

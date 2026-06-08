@@ -23,7 +23,6 @@ import { useQueryStore, getFilteredRows } from "@/stores/query"
 import { useSqlHistoryStore } from "@/stores/sql-history"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
 import { usePivotStore } from "@/stores/pivot"
-import { formatRowCount } from "@/lib/format"
 import { generatePivotSQL } from "@/lib/pivot-sql"
 import type { PivotConfig } from "@/lib/pivot-sql"
 
@@ -33,31 +32,25 @@ export default function Home() {
     sidebarOpen,
     rightPanelOpen,
     rightPanelWidth,
-    activeTab,
     pivotView,
     toggleSidebar,
     toggleRightPanel,
     setRightPanelWidth,
-    setActiveTab,
     setPivotView,
   } = useUiStore(useShallow((s) => ({
     sidebarOpen: s.sidebarOpen,
     rightPanelOpen: s.rightPanelOpen,
     rightPanelWidth: s.rightPanelWidth,
-    activeTab: s.activeTab,
     pivotView: s.pivotView,
     toggleSidebar: s.toggleSidebar,
     toggleRightPanel: s.toggleRightPanel,
     setRightPanelWidth: s.setRightPanelWidth,
-    setActiveTab: s.setActiveTab,
     setPivotView: s.setPivotView,
   })))
-  const { selectedTable, schema, selectedDatabase, tables, databases } = useDatasetStore(useShallow((s) => ({
+  const { selectedTable, schema, selectedDatabase } = useDatasetStore(useShallow((s) => ({
     selectedTable: s.selectedTable,
     schema: s.schema,
     selectedDatabase: s.selectedDatabase,
-    tables: s.tables,
-    databases: s.databases,
   })))
 
   const {
@@ -217,9 +210,9 @@ export default function Home() {
   const handleAgentSqlGenerated = useCallback(
     (sql: string) => {
       setSqlText(sql)
-      setActiveTab("sql")
+      setPivotView("grid")
     },
-    [setActiveTab]
+    [setPivotView]
   )
 
   const addSavedQuery = useSavedQueriesStore((s) => s.add)
@@ -288,89 +281,6 @@ export default function Home() {
     },
     [selectedTable, selectedDatabase]
   )
-
-  const rightContent = () => {
-    switch (activeTab) {
-      case "schema":
-        if (selectedTable && schema.length > 0) {
-          const tableMeta = tables.find((t) => t.name === selectedTable)
-          const dbMeta = databases.find((d) => d.name === selectedDatabase)
-          return (
-            <div className="p-2 space-y-2">
-              {dbMeta?.comment && (
-                <div className="px-2 py-1.5 border-b border-border mb-1 text-[10px] text-muted-foreground/90 leading-relaxed">
-                  {_t("schema.data_source")}：{dbMeta.comment}
-                </div>
-              )}
-              {tableMeta && (
-                <div className="px-2 py-1.5 border-b border-border mb-1">
-                  <div className="text-xs font-semibold">{tableMeta.name}</div>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                    <span className="font-mono">{tableMeta.engine}</span>
-                    <span>·</span>
-                    <span>{formatRowCount(tableMeta.rowCount)} rows</span>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground/90 italic mt-0.5">
-                    {tableMeta.comment || "–"}
-                  </div>
-                </div>
-              )}
-              <div className="space-y-0.5">
-              {schema.map((col) => (
-                <div
-                  key={col.name}
-                  className="flex flex-col text-xs px-2 py-1.5 rounded hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{col.name}</span>
-                    <span className="text-muted-foreground font-mono text-[10px] ml-auto">
-                      {col.type}
-                    </span>
-                  </div>
-                  {col.comment && (
-                    <span className="text-[10px] text-muted-foreground/90 italic leading-tight mt-0.5">
-                      {col.comment}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            </div>
-          )
-        }
-        return (
-          <p className="text-xs text-muted-foreground p-3">
-            {_t("schema.select_table")}
-          </p>
-        )
-      case "sql":
-        return (
-          <div className="flex flex-col h-full">
-            <SqlConsole
-              sql={sqlText}
-              onSqlChange={setSqlText}
-              onExecute={handleSqlExecute}
-              onSave={handleSave}
-              isExecuting={isExecuting}
-              tableName={selectedTable}
-              selectedDatabase={selectedDatabase}
-            />
-            <div className="shrink-0">
-              <QueryPanels onSelectSql={handleSelectSavedSql} />
-            </div>
-          </div>
-        )
-      case "agent":
-        return (
-          <AgentChat
-            tableName={selectedTable}
-            schema={schema}
-            selectedDatabase={selectedDatabase}
-            onSqlGenerated={handleAgentSqlGenerated}
-          />
-        )
-    }
-  }
 
   return (
     <ErrorBoundary>
@@ -442,36 +352,54 @@ export default function Home() {
                   </div>
 
                   {pivotView === "grid" ? (
-                    /* Grid View */
-                    error ? (
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="text-sm text-destructive">{error}</div>
-                      </div>
-                    ) : data ? (
-                      <DataGrid
-                        columns={data.columns}
-                        rows={filteredRows}
-                        schema={schema}
-                        selectedTable={selectedTable ?? ""}
-                        sortColumn={sort.column}
-                        sortDirection={sort.direction}
-                        onSort={handleSort}
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                        loadedRows={loadedRows}
-                        onLoadMore={loadMore}
-                        isLoading={isExecuting}
-                        onDownloadCsv={handleCopyCsv}
-                        onDownloadJson={handleCopyJson}
-                      />
-                    ) : isExecuting ? (
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span className="inline-block w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                          {_t("main.loading")} {selectedTable}...
+                    /* Grid View — SQL panel (left) + DataGrid (right) */
+                    <div className="flex-1 flex gap-2 overflow-hidden">
+                      <div className="w-80 shrink-0 border border-border rounded-md overflow-hidden flex flex-col">
+                        <SqlConsole
+                          sql={sqlText}
+                          onSqlChange={setSqlText}
+                          onExecute={handleSqlExecute}
+                          onSave={handleSave}
+                          isExecuting={isExecuting}
+                          tableName={selectedTable}
+                          selectedDatabase={selectedDatabase}
+                        />
+                        <div className="shrink-0">
+                          <QueryPanels onSelectSql={handleSelectSavedSql} />
                         </div>
                       </div>
-                    ) : null
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        {error ? (
+                          <div className="flex-1 flex items-center justify-center">
+                            <div className="text-sm text-destructive">{error}</div>
+                          </div>
+                        ) : data ? (
+                          <DataGrid
+                            columns={data.columns}
+                            rows={filteredRows}
+                            schema={schema}
+                            selectedTable={selectedTable ?? ""}
+                            sortColumn={sort.column}
+                            sortDirection={sort.direction}
+                            onSort={handleSort}
+                            searchQuery={searchQuery}
+                            onSearchChange={setSearchQuery}
+                            loadedRows={loadedRows}
+                            onLoadMore={loadMore}
+                            isLoading={isExecuting}
+                            onDownloadCsv={handleCopyCsv}
+                            onDownloadJson={handleCopyJson}
+                          />
+                        ) : isExecuting ? (
+                          <div className="flex-1 flex items-center justify-center">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span className="inline-block w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                              {_t("main.loading")} {selectedTable}...
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   ) : (
                     /* Pivot View */
                     <div className="flex-1 flex gap-2 overflow-hidden">
@@ -567,15 +495,13 @@ export default function Home() {
               className="shrink-0 border-l border-border overflow-hidden"
               style={{ width: rightPanelWidth }}
             >
-              <div className="flex h-full flex-col">
-                <div className="flex border-b border-border shrink-0">
-                  {(["schema", "sql", "agent"] as const).map((tab) => (
-                    <TabButton key={tab} tab={tab} />
-                  ))}
-                </div>
-                <div className="flex-1 overflow-auto">
-                  <ErrorBoundary>{rightContent()}</ErrorBoundary>
-                </div>
+              <div className="h-full overflow-auto">
+                <AgentChat
+                  tableName={selectedTable}
+                  schema={schema}
+                  selectedDatabase={selectedDatabase}
+                  onSqlGenerated={handleAgentSqlGenerated}
+                />
               </div>
             </aside>
             </>
@@ -623,27 +549,6 @@ export default function Home() {
         </div>
       )}
     </ErrorBoundary>
-  )
-}
-
-function TabButton({ tab }: { tab: "agent" | "sql" | "schema" }) {
-  const { _t } = useLang()
-  const activeTab = useUiStore((s) => s.activeTab)
-  const setActiveTab = useUiStore((s) => s.setActiveTab)
-  const labels = { agent: _t("tab.agent"), sql: _t("tab.sql"), schema: _t("tab.schema") }
-  const isActive = activeTab === tab
-
-  return (
-    <button
-      onClick={() => setActiveTab(tab)}
-      className={`flex-1 text-xs font-medium py-2 px-3 transition-colors ${
-        isActive
-          ? "text-foreground border-b-2 border-foreground"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {labels[tab]}
-    </button>
   )
 }
 

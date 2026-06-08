@@ -1,83 +1,83 @@
 # PRD：Open Data Studio Workbench
 
-**Version:** V1.0
-**Date:** 2026-06-06
-**Status:** Approved
+**版本：** V1.0
+**日期：** 2026-06-06
+**状态：** 已批准
 
 ---
 
-## Problem Statement
+## 问题陈述
 
-Hugging Face Data Studio is the industry's best interactive dataset exploration tool, but its Viewer frontend and Agent backend are closed-source. Enterprises, research institutions, and individual developers need a self-hosted equivalent that works in air-gapped environments (intranet, private cloud) with customizable analysis logic (e.g., bring-your-own LLM as Agent).
+Hugging Face Data Studio 是业界最好的交互式数据集探索工具，但其 Viewer 前端和 Agent 后端是闭源的。企业、研究机构和独立开发者需要一个可在隔离环境（内网、私有云）中运行的自托管等效方案，并支持可定制的分析逻辑（例如自带 LLM 作为 Agent）。
 
-Existing open-source alternatives either lack the polished UI/UX of Data Studio or require complex server-side infrastructure. Users want a single-page application that connects directly to their existing data warehouse (ClickHouse), provides a beautiful data grid, a SQL console, and an AI agent that understands natural language queries — all deployable via Docker in under 5 minutes.
-
----
-
-## Solution
-
-An open-source, self-hosted, premium-look data exploration workbench. It is a **Next.js** application with a **ClickHouse-native backend proxy**, delivering:
-
-- **1:1 UI/UX replica** of Hugging Face Data Studio's three-panel layout
-- **ClickHouse as primary data source** — queries execute server-side via HTTP API, results stream to the browser data grid
-- **Monaco Editor SQL console** with syntax highlighting, auto-complete, query history
-- **AI Agent tab** with NL2SQL, auto-visualization, and data profiling — powered by configurable LLM (OpenAI / Ollama)
-- **Dark/Light mode**, virtual scrolling for million-row datasets, column-type-aware rendering
-
-No data ever leaves the deployment environment unless the user explicitly connects an external LLM API.
+现有的开源替代方案要么缺乏 Data Studio 精致的 UI/UX，要么需要复杂的服务器端基础设施。用户希望有一个单页应用，能直接连接到现有的数据仓库（ClickHouse），提供美观的数据网格、SQL 控制台和理解自然语言查询的 AI Agent —— 全部通过 Docker 在 5 分钟内部署完成。
 
 ---
 
-## User Stories
+## 解决方案
 
-1. As a data scientist, I want to browse all available tables in ClickHouse from a sidebar, so that I can quickly find the dataset I need.
-2. As a data scientist, I want to select a table and see its first 100 rows in a virtual-scrolled data grid, so that I can preview data without writing SQL.
-3. As a data scientist, I want each column to be rendered with its detected type (String, Number, Boolean, List, Struct), so that I can understand the schema at a glance.
-4. As a data scientist, I want to click a column header to sort ascending/descending, so that I can quickly inspect value distributions.
-5. As a data scientist, I want to filter rows by text search across all columns, so that I can find relevant records without writing WHERE clauses.
-6. As a data scientist, I want the data grid to smoothly scroll through millions of rows without freezing the browser, so that I can explore large datasets interactively.
-7. As an algorithm engineer, I want to write arbitrary SQL in a Monaco Editor and execute it against ClickHouse, so that I can run complex analytical queries.
-8. As an algorithm engineer, I want SQL syntax highlighting and auto-complete for ClickHouse dialect, so that I can write queries faster with fewer errors.
-9. As an algorithm engineer, I want a one-click "SELECT * LIMIT 100" button, so that I can quickly inspect a table without typing.
-10. As an algorithm engineer, I want to copy query results as CSV or JSON with one click, so that I can export data for downstream processing.
-11. As an algorithm engineer, I want my last 20 SQL queries saved in a history panel, so that I can recall and re-run previous analyses.
-12. As a business analyst, I want to type natural language questions in an Agent chat panel, so that I can explore data without writing SQL.
-13. As a business analyst, I want the Agent to generate and execute SQL automatically, returning results as a formatted table in the chat, so that I see answers inline.
-14. As a business analyst, I want the Agent to suggest charts (bar, line, pie) when the result is visualizable, so that I can understand trends at a glance.
-15. As a business analyst, I want to one-click generate a data profile report (missing values, mean, distribution) for any table, so that I can assess data quality quickly.
-16. As a business analyst, I want the Agent's generated SQL to be auto-filled into the SQL tab when I switch, so that I can inspect or tweak the query manually.
-17. As a power user, I want to configure my own LLM API key (OpenAI / Ollama endpoint) in the settings panel, so that I can use my preferred model.
-18. As a power user, I want to toggle between Light and Dark themes that persist across sessions, so that I work comfortably in any environment.
-19. As a devops engineer, I want to deploy the entire stack as a single Docker container with environment variables for ClickHouse connection, so that I can stand it up in 5 minutes.
-20. As a devops engineer, I want to configure ClickHouse host, port, user, password via environment variables, so that credentials are not hard-coded.
-21. As a security-conscious admin, I want to ensure no data is sent to external LLM services unless the user explicitly configures an API key, so that sensitive data stays in the network.
-22. As a user, I want to see a clean "Connecting..." → "Connected" indicator for the ClickHouse connection status, so that I know the system is ready.
-23. As a user, I want error messages to be human-readable (e.g., "Column 'foo' not found" instead of a raw ClickHouse stack trace), so that I can fix issues without reading logs.
-24. As a user, I want the dataset tree in the sidebar to show table names and row counts, so that I can estimate data size before querying.
-25. As a user, I want the sidebar to be collapsible, so that I can maximize the data grid when needed.
+一个开源、自托管、具有高级感 UI 的数据探索工作台。它是一个 **Next.js** 应用，配合 **ClickHouse 原生后端代理**，提供：
+
+- **1:1 复刻** Hugging Face Data Studio 的三栏布局
+- **ClickHouse 作为主数据源** —— 查询通过 HTTP API 在服务端执行，结果流式传输到浏览器数据网格
+- **Monaco Editor SQL 控制台**，支持语法高亮、自动补全、查询历史
+- **AI Agent 标签页**，支持 NL2SQL、自动可视化和数据画像 —— 由可配置的 LLM（OpenAI / Ollama）驱动
+- **深色/浅色模式**，百万行数据集的虚拟滚动，列类型感知渲染
+
+除非用户明确连接外部 LLM API，否则数据不会离开部署环境。
 
 ---
 
-## Implementation Decisions
+## 用户故事
 
-### Architecture: Backend Proxy over Direct Browser Connection
+1. 作为数据科学家，我希望从侧边栏浏览 ClickHouse 中所有可用的表，以便快速找到所需的数据集。
+2. 作为数据科学家，我希望选择一张表并在虚拟滚动的数据网格中查看前 100 行，以便无需编写 SQL 即可预览数据。
+3. 作为数据科学家，我希望每列都按检测到的类型（String、Number、Boolean、List、Struct）渲染，以便一目了然地理解表结构。
+4. 作为数据科学家，我希望点击列头进行升序/降序排序，以便快速检查值的分布。
+5. 作为数据科学家，我希望通过文本搜索跨所有列过滤行，以便无需编写 WHERE 子句即可找到相关记录。
+6. 作为数据科学家，我希望数据网格能流畅地滚动浏览百万行而不卡顿浏览器，以便交互式地探索大型数据集。
+7. 作为算法工程师，我希望在 Monaco Editor 中编写任意 SQL 并对 ClickHouse 执行，以便运行复杂的分析查询。
+8. 作为算法工程师，我希望有 ClickHouse 方言的 SQL 语法高亮和自动补全，以便更快地编写查询、减少错误。
+9. 作为算法工程师，我希望有一个一键 "SELECT * LIMIT 100" 按钮，以便无需输入即可快速检查表结构。
+10. 作为算法工程师，我希望一键将查询结果复制为 CSV 或 JSON，以便导出数据进行下游处理。
+11. 作为算法工程师，我希望最近 20 条 SQL 查询保存在历史面板中，以便回忆和重新运行之前的分析。
+12. 作为业务分析师，我希望在 Agent 聊天面板中输入自然语言问题，以便无需编写 SQL 即可探索数据。
+13. 作为业务分析师，我希望 Agent 自动生成并执行 SQL，在聊天中以格式化的表格返回结果，以便内联查看答案。
+14. 作为业务分析师，当结果适合可视化时，我希望 Agent 建议图表类型（柱状图、折线图、饼图），以便一目了然地理解趋势。
+15. 作为业务分析师，我希望一键生成任何表的数据画像报告（缺失值、均值、分布），以便快速评估数据质量。
+16. 作为业务分析师，当切换到 SQL 标签页时，我希望 Agent 生成的 SQL 自动填充，以便手动检查或调整查询。
+17. 作为高级用户，我希望在设置面板中配置自己的 LLM API Key（OpenAI / Ollama 端点），以便使用偏好的模型。
+18. 作为高级用户，我希望在浅色和深色主题之间切换并跨会话持久化，以便在任何环境中舒适工作。
+19. 作为 DevOps 工程师，我希望将整个技术栈部署为单个 Docker 容器，并通过环境变量配置 ClickHouse 连接，以便在 5 分钟内启动。
+20. 作为 DevOps 工程师，我希望通过环境变量配置 ClickHouse 的 host、port、user、password，以便不硬编码凭据。
+21. 作为安全管理员，我希望确保除非用户明确配置 API Key，否则数据不会发送到外部 LLM 服务，以便敏感数据留在网络内。
+22. 作为用户，我希望看到清晰的 "连接中..." → "已连接" 指示器显示 ClickHouse 连接状态，以便知道系统已就绪。
+23. 作为用户，我希望错误消息是人类可读的（例如 "Column 'foo' not found" 而非原始的 ClickHouse 堆栈跟踪），以便无需阅读日志即可修复问题。
+24. 作为用户，我希望侧边栏中的数据集树显示表名和行数，以便在查询前估算数据量。
+25. 作为用户，我希望侧边栏可折叠，以便在需要时最大化数据网格区域。
 
-ClickHouse's HTTP API supports CORS, but exposing port 8123 directly to the browser is a security risk and complicates credential management. Instead, a **Next.js API route layer** proxies all ClickHouse queries:
+---
+
+## 实现决策
+
+### 架构：后端代理而非浏览器直连
+
+ClickHouse 的 HTTP API 支持 CORS，但将 8123 端口直接暴露给浏览器存在安全风险且使凭据管理复杂化。因此，使用 **Next.js API 路由层**代理所有 ClickHouse 查询：
 
 ```
-Browser (React)  ──HTTP──>  Next.js API Route  ──HTTP──>  ClickHouse :8123
+浏览器 (React)  ──HTTP──>  Next.js API 路由  ──HTTP──>  ClickHouse :8123
 ```
 
-- The API route uses `@clickhouse/client` (official Node.js client) with HTTP transport
-- ClickHouse credentials are read from environment variables (`CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `CLICKHOUSE_DB`) at the API route level
-- The frontend never sees the raw credentials
-- Each SQL query is sent as `POST /api/query` with `{ sql: string, params?: Record<string, unknown> }` and returns `{ columns: string[], rows: unknown[][], stats: { elapsed: number, rows_read: number } }`
+- API 路由使用 `@clickhouse/client`（官方 Node.js 客户端），HTTP 传输
+- ClickHouse 凭据在 API 路由层从环境变量读取（`CLICKHOUSE_HOST`、`CLICKHOUSE_PORT`、`CLICKHOUSE_USER`、`CLICKHOUSE_PASSWORD`、`CLICKHOUSE_DB`）
+- 前端永远看不到原始凭据
+- 每个 SQL 查询通过 `POST /api/query` 发送，请求体 `{ sql: string, params?: Record<string, unknown> }`，返回 `{ columns: string[], rows: unknown[][], stats: { elapsed: number, rows_read: number } }`
 
-### Deep Modules
+### 深度模块
 
-#### Module 1: `clickhouse-client` (backend utility)
+#### 模块 1：`clickhouse-client`（后端工具）
 
-A thin wrapper around `@clickhouse/client` that provides:
+对 `@clickhouse/client` 的薄封装，提供：
 
 ```typescript
 interface ClickHouseClient {
@@ -85,7 +85,7 @@ interface ClickHouseClient {
   getTables(): Promise<TableMeta[]>
   getTableSchema(table: string): Promise<ColumnMeta[]>
   getRowCount(table: string): Promise<number>
-  queryWithStream(sql: string): AsyncIterable<Row[]>  // for large result sets
+  queryWithStream(sql: string): AsyncIterable<Row[]>  // 用于大型结果集
 }
 
 interface QueryResult {
@@ -95,135 +95,135 @@ interface QueryResult {
 }
 ```
 
-This is a **deep module** — it encapsulates all ClickHouse-specific protocol details (HTTP transport, query formatting, error normalization, timeout handling) behind a simple interface. Testable in isolation by pointing at a test ClickHouse instance.
+这是一个**深度模块** —— 它将所有 ClickHouse 特定的协议细节（HTTP 传输、查询格式化、错误规范化、超时处理）封装在一个简单接口之后。可通过指向测试 ClickHouse 实例进行独立测试。
 
-#### Module 2: `dataset-tree` (frontend component + hook)
+#### 模块 2：`dataset-tree`（前端组件 + hook）
 
-- On mount: fetches `GET /api/tables` → loads table list with row counts into Zustand store
-- Renders a collapsible tree with search/filter input
-- Clicking a table triggers: `GET /api/tables/{name}/schema` + `POST /api/query { sql: "SELECT * FROM {name} LIMIT 100" }`
-- Schema populates the column type registry in the data grid
-- Row data populates the data grid store
+- 挂载时：请求 `GET /api/tables` → 将表列表和行数加载到 Zustand store
+- 渲染可折叠的树结构，带搜索/过滤输入框
+- 点击表触发：`GET /api/tables/{name}/schema` + `POST /api/query { sql: "SELECT * FROM {name} LIMIT 100" }`
+- Schema 填充数据网格中的列类型注册表
+- 行数据填充数据网格 store
 
-#### Module 3: `data-grid` (frontend component)
+#### 模块 3：`data-grid`（前端组件）
 
-- Built on `@tanstack/react-table` with `@tanstack/react-virtual` for virtual scrolling
-- Column rendering registry:
-  | ClickHouse type | Renderer |
+- 基于 `@tanstack/react-table` 构建，使用 `@tanstack/react-virtual` 实现虚拟滚动
+- 列渲染注册表：
+  | ClickHouse 类型 | 渲染器 |
   |---|---|
-  | `Int*`, `Float*`, `Decimal*` | Right-aligned, monospace, blue color |
-  | `String` | Left-aligned, gray |
-  | `DateTime*`, `Date` | Locale-formatted date string |
-  | `Array(...)` | Collapsible tag pills (click to expand) |
-  | `Tuple`, `Nested` | JSON collapsible tree |
-  | `Nullable(T)` | "∅" badge when null, type renderer when non-null |
-  | `Bool` | Checkmark / cross icon |
-- Sorting: `POST /api/query` with `ORDER BY col DESC LIMIT 100` — resets to server-side query
-- Filtering: client-side text search across currently loaded rows
+  | `Int*`、`Float*`、`Decimal*` | 右对齐、等宽字体、蓝色 |
+  | `String` | 左对齐、灰色 |
+  | `DateTime*`、`Date` | 本地化格式的日期字符串 |
+  | `Array(...)` | 可折叠的标签胶囊（点击展开） |
+  | `Tuple`、`Nested` | JSON 可折叠树 |
+  | `Nullable(T)` | null 时显示 "∅" 徽章，非 null 时使用类型渲染器 |
+  | `Bool` | 勾选/叉号图标 |
+- 排序：`POST /api/query` 加 `ORDER BY col DESC LIMIT 100` —— 重置为服务端查询
+- 过滤：客户端文本搜索，搜索当前已加载的行
 
-#### Module 4: `sql-console` (frontend component)
+#### 模块 4：`sql-console`（前端组件）
 
-- Monaco Editor configured with ClickHouse SQL dialect (custom ` monarchTokensProvider` for ClickHouse functions: `arrayJoin`, `tuple`, `quantile`, etc.)
-- Toolbar: ▶ Run (Cmd+Enter), ⏹ Stop, 📋 Copy as CSV, 📋 Copy as JSON, ↔ Format SQL
-- History panel (Zustand store, persisted to localStorage, max 20)
-- On execute: `POST /api/query` → results load into data grid below the editor
-- Auto-fill from Agent: when user switches from Agent tab to SQL tab, the last Agent-generated SQL is pre-populated
+- Monaco Editor 配置 ClickHouse SQL 方言（自定义 `monarchTokensProvider` 支持 ClickHouse 函数：`arrayJoin`、`tuple`、`quantile` 等）
+- 工具栏：▶ 运行 (Cmd+Enter)、⏹ 停止、📋 复制为 CSV、📋 复制为 JSON、↔ 格式化 SQL
+- 历史面板（Zustand store，持久化到 localStorage，最多 20 条）
+- 执行时：`POST /api/query` → 结果加载到编辑器下方的数据网格
+- Agent 自动填充：当用户从 Agent 标签页切换到 SQL 标签页时，最近一次 Agent 生成的 SQL 会预填充
 
-#### Module 5: `agent` (frontend component + backend API)
+#### 模块 5：`agent`（前端组件 + 后端 API）
 
-**Frontend:**
-- Chat panel with streaming message display (Markdown rendering for text, inline `<DataTable>` for tabular results, `<Chart>` for visualizations)
-- Input bar with Send button (Enter to send, Shift+Enter for newline)
-- System prompt context includes: current table schema (columns + types), ClickHouse SQL dialect notes, and instructions to ALWAYS output executable SQL wrapped in ```sql blocks
-- Agent messages stored in Zustand + localStorage per session
+**前端：**
+- 聊天面板，流式消息显示（文本用 Markdown 渲染，表格结果用内联 `<DataTable>`，可视化用 `<Chart>`）
+- 输入栏带发送按钮（Enter 发送，Shift+Enter 换行）
+- 系统提示词上下文包含：当前表 schema（列 + 类型）、ClickHouse SQL 方言说明，以及始终输出用 ```sql 块包裹的可执行 SQL 的指令
+- Agent 消息存储在 Zustand + localStorage 中，按会话隔离
 
-**Backend (`POST /api/agent/chat`):**
-- Accepts: `{ messages: Message[], context: { currentTable?: string, schema?: ColumnMeta[] } }`
-- Uses Vercel AI SDK to stream LLM response
-- Tool definition for `execute_sql`:
+**后端 (`POST /api/agent/chat`)：**
+- 接收：`{ messages: Message[], context: { currentTable?: string, schema?: ColumnMeta[] } }`
+- 使用 Vercel AI SDK 流式传输 LLM 响应
+- `execute_sql` 工具定义：
   ```json
   {
     "name": "execute_sql",
-    "description": "Execute a ClickHouse SQL query and return results",
+    "description": "执行 ClickHouse SQL 查询并返回结果",
     "parameters": {
       "type": "object",
       "properties": {
-        "sql": { "type": "string", "description": "ClickHouse SQL to execute" }
+        "sql": { "type": "string", "description": "要执行的 ClickHouse SQL" }
       },
       "required": ["sql"]
     }
   }
   ```
-- LLM calls `execute_sql` → results injected into the response stream as a tool result
-- Frontend renders the tool result as a formatted table
-- LLM configuration: stored in browser `localStorage` under key `llm_config`:
+- LLM 调用 `execute_sql` → 结果作为工具结果注入响应流
+- 前端将工具结果渲染为格式化的表格
+- LLM 配置：存储在浏览器 `localStorage` 的 `llm_config` 键下：
   ```json
   { "provider": "openai" | "ollama", "apiKey": "...", "baseUrl": "...", "model": "gpt-4o" }
   ```
-  The API route reads these from the request header `x-llm-config` (base64-encoded) on each call — no server-side persistence.
-- Auto-visualization: the LLM's response includes a `visualization` field in the tool result metadata:
+  API 路由在每次调用时从请求头 `x-llm-config`（base64 编码）读取 —— 无服务端持久化。
+- 自动可视化：LLM 的响应在工具结果元数据中包含 `visualization` 字段：
   ```json
   { "type": "bar" | "line" | "pie", "config": { "xKey": "...", "yKey": "..." } }
   ```
 
-#### Module 6: `chart` (frontend component)
+#### 模块 6：`chart`（前端组件）
 
-- Uses Recharts for rendering
-- Accepts: `{ data: Row[], config: { type, xKey, yKey, title? } }`
-- Renders interactive chart with hover tooltip, legend
-- Chart type detection from Agent: the LLM recommends based on column types (categorical x → bar, temporal x → line, categorical both → stacked bar, single dimension + measure → pie)
+- 使用 Recharts 渲染
+- 接收：`{ data: Row[], config: { type, xKey, yKey, title? } }`
+- 渲染交互式图表，支持悬停提示、图例
+- Agent 图表类型检测：LLM 根据列类型推荐（分类 x → 柱状图，时间 x → 折线图，双分类 → 堆叠柱状图，单维度 + 度量 → 饼图）
 
-#### Module 7: `layout` (frontend shell)
+#### 模块 7：`layout`（前端外壳）
 
-Three-panel layout using CSS Grid:
+三栏布局，使用 CSS Grid：
 
 ```
 ┌──────────────────────────────────────────┐
-│  [☰] Open Data Studio    🌙 ⚙️          │  ← Header (40px)
+│  [☰] Open Data Studio    🌙 ⚙️          │  ← 头部 (40px)
 ├────────┬─────────────────┬───────────────┤
 │        │                 │  Agent  │ SQL │
-│ Table  │   Data Grid     │  Schema  │    │
-│ Tree   │   (virtual      │ ───────────── │  ← Right Panel (400px)
-│        │    scroll)       │  Chat /       │
-│        │                 │  Editor       │
+│ 表     │   数据网格       │  Schema  │    │
+│ 树     │   (虚拟滚动)     │ ───────────── │  ← 右侧面板 (400px)
+│        │                 │  聊天 /       │
+│        │                 │  编辑器       │
 │        │                 │               │
 ├────────┴─────────────────┴───────────────┤
-│   Status: Connected │ 95.92M rows total  │  ← Footer bar (24px)
+│   状态：已连接 │ 共 95.92M 行              │  ← 状态栏 (24px)
 └──────────────────────────────────────────┘
 ```
 
-- Sidebar collapsible (min width 0, max 280px)
-- Right panel collapsible (min width 0, max 480px)
-- Zustand store: `{ sidebarOpen, rightPanelOpen, activeTab, theme, llmConfig }`
-- Theme: `next-themes` with `system` default, persisted
+- 侧边栏可折叠（最小宽度 0，最大 280px）
+- 右侧面板可折叠（最小宽度 0，最大 480px）
+- Zustand store：`{ sidebarOpen, rightPanelOpen, activeTab, theme, llmConfig }`
+- 主题：`next-themes`，默认跟随系统，持久化
 
-### API Surface
+### API 接口
 
-| Method | Path | Request | Response |
+| 方法 | 路径 | 请求 | 响应 |
 |--------|------|---------|----------|
 | GET | `/api/tables` | — | `{ tables: { name, rowCount, engine }[] }` |
 | GET | `/api/tables/{name}/schema` | — | `{ columns: { name, type }[] }` |
 | POST | `/api/query` | `{ sql }` | `{ columns, rows, stats }` |
-| POST | `/api/agent/chat` | `{ messages, context }` + `x-llm-config` header | `Stream<ChatCompletionChunk>` |
+| POST | `/api/agent/chat` | `{ messages, context }` + `x-llm-config` 请求头 | `Stream<ChatCompletionChunk>` |
 
-### Data Flow: Agent NL2SQL Scenario
+### 数据流：Agent NL2SQL 场景
 
 ```
-1. User types: "top 10 regions by sales"
-2. Frontend sends POST /api/agent/chat
-   { messages: [{role:"user", content:"top 10 regions by sales"}],
+1. 用户输入："销售额前 10 的地区"
+2. 前端发送 POST /api/agent/chat
+   { messages: [{role:"user", content:"销售额前 10 的地区"}],
      context: { currentTable: "real_anonymized_sales" } }
-   + header x-llm-config: <base64 llm config>
-3. Backend streams LLM response:
-   - LLM thinks → returns tool_call: execute_sql({ sql: "SELECT region, sum(sales) as total FROM real_anonymized_sales GROUP BY region ORDER BY total DESC LIMIT 10" })
-   - Backend executes query against ClickHouse
-   - Returns tool_result with rows
-   - LLM formats final answer with markdown + visualization suggestion
-4. Frontend renders: markdown text + data table + chart (bar chart, x=region, y=total)
-5. User clicks SQL tab → SQL auto-filled from Agent's last tool call
+   + 请求头 x-llm-config: <base64 编码的 llm 配置>
+3. 后端流式传输 LLM 响应：
+   - LLM 思考 → 返回 tool_call: execute_sql({ sql: "SELECT region, sum(sales) as total FROM real_anonymized_sales GROUP BY region ORDER BY total DESC LIMIT 10" })
+   - 后端对 ClickHouse 执行查询
+   - 返回包含行数据的 tool_result
+   - LLM 格式化最终答案，附带 Markdown + 可视化建议
+4. 前端渲染：Markdown 文本 + 数据表 + 图表（柱状图，x=region，y=total）
+5. 用户点击 SQL 标签页 → SQL 从 Agent 最后一次工具调用自动填充
 ```
 
-### ClickHouse Connection (Environment Variables)
+### ClickHouse 连接（环境变量）
 
 ```env
 CLICKHOUSE_HOST=127.0.0.1
@@ -233,103 +233,103 @@ CLICKHOUSE_PASSWORD=your_clickhouse_password
 CLICKHOUSE_DB=default
 ```
 
-These match the running podman ClickHouse instance with 23 demo tables (95.92M rows / 1.48 GiB).
+这些值与运行中的 podman ClickHouse 实例匹配，包含 23 个演示表（95.92M 行 / 1.48 GiB）。
 
-### Error Handling Strategy
+### 错误处理策略
 
-- **ClickHouse connection errors** (timeout, auth failure): API returns `{ error: "connection_failed", message: "Cannot connect to ClickHouse at {host}:{port}. Verify the server is running." }` Frontend shows a yellow banner at the top.
-- **SQL syntax errors**: ClickHouse error message is parsed and re-wrapped: `{ error: "sql_error", message: "Syntax error at line 1, column 15: ...", details: { raw } }`. Frontend highlights the error location in Monaco Editor via marker API.
-- **Agent LLM errors** (invalid API key, rate limit): Stream returns a special `error` chunk. Frontend shows inline error in the chat panel with a link to the Settings panel.
-- **Timeout**: Backend enforces a 30s query timeout. Returns `{ error: "timeout", message: "Query exceeded 30 second limit. Try adding a LIMIT or filtering." }`.
-- **Large result sets**: If result exceeds 10,000 rows, backend returns first 10,000 + `{ truncated: true, totalRows: n }`. Frontend shows "Showing 10,000 of 250,000 rows" with a "Load more" button.
+- **ClickHouse 连接错误**（超时、认证失败）：API 返回 `{ error: "connection_failed", message: "无法连接到 ClickHouse at {host}:{port}。请确认服务器正在运行。" }`。前端在顶部显示黄色横幅。
+- **SQL 语法错误**：解析并重新包装 ClickHouse 错误消息：`{ error: "sql_error", message: "第 1 行第 15 列语法错误：...", details: { raw } }`。前端通过 Monaco Editor 的 marker API 高亮错误位置。
+- **Agent LLM 错误**（无效 API Key、速率限制）：流返回特殊的 `error` 块。前端在聊天面板中显示内联错误，附带设置面板的链接。
+- **超时**：后端强制 30 秒查询超时。返回 `{ error: "timeout", message: "查询超过 30 秒限制。请添加 LIMIT 或过滤条件。" }`。
+- **大型结果集**：如果结果超过 10,000 行，后端返回前 10,000 行 + `{ truncated: true, totalRows: n }`。前端显示 "显示 10,000 / 250,000 行"，附带 "加载更多" 按钮。
 
 ---
 
-## Testing Decisions
+## 测试决策
 
-### Testing Philosophy
+### 测试理念
 
-- Test external behavior, not implementation details
-- Integration tests for the ClickHouse client against the real podman ClickHouse instance
-- Component tests for the data grid, agent chat, and SQL editor using realistic fixture data
-- No snapshot tests for charts (visual regression is out of scope for V1)
+- 测试外部行为，不测试实现细节
+- 对 ClickHouse 客户端进行集成测试，使用真实的 podman ClickHouse 实例
+- 对数据网格、Agent 聊天和 SQL 编辑器进行组件测试，使用真实的 fixture 数据
+- 不对图表进行快照测试（视觉回归不在 V1 范围内）
 
-### Modules to Test
+### 待测试模块
 
-| Module | Test Type | Approach |
+| 模块 | 测试类型 | 方法 |
 |--------|-----------|----------|
-| `clickhouse-client` | Integration | Spin up test ClickHouse (or use the running podman instance), verify `query()`, `getTables()`, `getTableSchema()` return correct shapes. Test error cases: invalid SQL, timeout, connection refused. |
-| `dataset-tree` | Component (Vitest + Testing Library) | Mock `GET /api/tables` response, render tree, verify table names appear. Click on table → verify schema fetch is called. |
-| `data-grid` | Component | Pass mock column metadata + row data. Verify virtual scrolling renders visible rows only. Verify column type renderers (Number = right-aligned, Nullable = ∅ badge). |
-| `sql-console` | Component | Mock `POST /api/query`. Type SQL, click Run → verify loading state, then result table. Verify history panel shows past queries. |
-| `agent` | Component + Integration | Mock `POST /api/agent/chat` with streaming response. Verify messages render in order (user → assistant thinking → tool call → tool result → final answer). Verify chart component renders when visualization config is present. |
-| `API routes` | Integration (Vitest + supertest) | Start Next.js in test mode. Call `/api/tables` → verify table list. Call `/api/query` with invalid SQL → verify error shape. |
+| `clickhouse-client` | 集成 | 启动测试 ClickHouse（或使用运行中的 podman 实例），验证 `query()`、`getTables()`、`getTableSchema()` 返回正确的数据结构。测试错误情况：无效 SQL、超时、连接被拒。 |
+| `dataset-tree` | 组件（Vitest + Testing Library） | Mock `GET /api/tables` 响应，渲染树结构，验证表名出现。点击表 → 验证 schema 请求被调用。 |
+| `data-grid` | 组件 | 传入 mock 列元数据 + 行数据。验证虚拟滚动仅渲染可见行。验证列类型渲染器（数字 = 右对齐，Nullable = ∅ 徽章）。 |
+| `sql-console` | 组件 | Mock `POST /api/query`。输入 SQL，点击运行 → 验证加载状态，然后验证结果表。验证历史面板显示过去的查询。 |
+| `agent` | 组件 + 集成 | Mock `POST /api/agent/chat` 的流式响应。验证消息按顺序渲染（用户 → 助手思考 → 工具调用 → 工具结果 → 最终答案）。验证存在可视化配置时图表组件正确渲染。 |
+| `API 路由` | 集成（Vitest + supertest） | 以测试模式启动 Next.js。调用 `/api/tables` → 验证表列表。用无效 SQL 调用 `/api/query` → 验证错误格式。 |
 
-### Prior Art
+### 先前经验
 
-- The existing `nextanalysis` project at `/Users/chrisbi/Documents/KELI/workspaces/nextanalysis/` has a similar ClickHouse proxy pattern — its test structure can serve as reference
-- Component tests follow the patterns established in `@shadcn/ui` examples: render → assert DOM → simulate interaction → assert updated state
-
----
-
-## Out of Scope
-
-- **Data upload / write-back**: V1 is read-only. Users cannot INSERT, UPDATE, DELETE, or CREATE TABLE through the UI.
-- **Multi-user auth**: No login system. V1 assumes a single-user or trusted-network deployment. ClickHouse credentials are server-configured, not per-user.
-- **Dashboard / saved reports**: No persistent dashboard. V1 is session-based exploration only.
-- **Parquet / CSV / JSONL file upload**: ClickHouse is the exclusive data source in V1. File upload is deferred to V2.
-- **S3 / Hugging Face Hub integration**: Deferred to V2.
-- **Mobile responsiveness**: The layout is desktop-only (min 1280px width).
-- **Server-side query caching**: Every query hits ClickHouse fresh. V1 does not implement result caching.
-- **Multi-model LLM routing**: The Agent uses one LLM at a time (configured in settings). No automatic model selection based on task.
-- **Export to Parquet**: Only CSV/JSON export from the SQL console. No structured data export.
+- `/Users/chrisbi/Documents/KELI/workspaces/nextanalysis/` 现有的 `nextanalysis` 项目有类似的 ClickHouse 代理模式 —— 其测试结构可作为参考
+- 组件测试遵循 `@shadcn/ui` 示例中建立的模式：渲染 → 断言 DOM → 模拟交互 → 断言更新后的状态
 
 ---
 
-## Further Notes
+## 不在范围内
 
-### Demo Data Source
+- **数据上传 / 回写**：V1 是只读的。用户无法通过 UI 执行 INSERT、UPDATE、DELETE 或 CREATE TABLE。
+- **多用户认证**：无登录系统。V1 假设单用户或可信网络部署。ClickHouse 凭据由服务端配置，非按用户。
+- **仪表盘 / 保存的报告**：无持久化仪表盘。V1 仅基于会话的探索。
+- **Parquet / CSV / JSONL 文件上传**：V1 中 ClickHouse 是唯一数据源。文件上传推迟到 V2。
+- **S3 / Hugging Face Hub 集成**：推迟到 V2。
+- **移动端响应式**：布局仅限桌面端（最小宽度 1280px）。
+- **服务端查询缓存**：每次查询都重新访问 ClickHouse。V1 不实现结果缓存。
+- **多模型 LLM 路由**：Agent 一次使用一个 LLM（在设置中配置）。没有基于任务的自动模型选择。
+- **导出为 Parquet**：仅从 SQL 控制台导出 CSV/JSON。无结构化数据导出。
 
-The running ClickHouse instance (podman, container name `clickhouse`) contains 23 demo datasets totaling **95.92M rows / 1.48 GiB**. Notable tables:
+---
 
-| Table | Rows | Description |
+## 补充说明
+
+### 演示数据源
+
+运行中的 ClickHouse 实例（podman，容器名 `clickhouse`）包含 23 个演示数据集，共 **95.92M 行 / 1.48 GiB**。主要表：
+
+| 表名 | 行数 | 描述 |
 |-------|------|-------------|
-| `dunnhumby_causal` | 36.8M | Promotion causality |
-| `real_anonymized_sales` | 29.4M | Anonymized sales records |
-| `criteo_attribution` | 16.5M | Ad attribution |
-| `salt_joined` | 2.3M | SAP wide table (joined) |
-| `fmcg_multi_country` | 1.1M | Cross-country FMCG sales |
+| `dunnhumby_causal` | 36.8M | 促销因果分析 |
+| `real_anonymized_sales` | 29.4M | 匿名化销售记录 |
+| `criteo_attribution` | 16.5M | 广告归因 |
+| `salt_joined` | 2.3M | SAP 宽表（已关联） |
+| `fmcg_multi_country` | 1.1M | 跨国快消品销售 |
 
-Connection details are in `podman-servers.md` — the default `.env` file in the project root should mirror these values.
+连接详情在 `podman-servers.md` 中 —— 项目根目录的默认 `.env` 文件应与这些值保持一致。
 
-### LLM Configuration UX
+### LLM 配置 UX
 
-The Settings panel (gear icon in header) exposes:
-- Provider dropdown: OpenAI / Ollama
-- API Key input (masked, stored in localStorage)
-- Base URL input (defaults to `https://api.openai.com/v1` for OpenAI, `http://localhost:11434/v1` for Ollama)
-- Model name input (defaults: `gpt-4o` for OpenAI, `llama3` for Ollama)
-- "Test Connection" button that sends a minimal chat request to verify the configuration
+设置面板（头部齿轮图标）提供：
+- 提供商下拉：OpenAI / Ollama
+- API Key 输入（掩码显示，存储在 localStorage）
+- Base URL 输入（OpenAI 默认 `https://api.openai.com/v1`，Ollama 默认 `http://localhost:11434/v1`）
+- 模型名称输入（OpenAI 默认 `gpt-4o`，Ollama 默认 `llama3`）
+- "测试连接" 按钮，发送最小聊天请求以验证配置
 
-### Agent System Prompt Essentials
+### Agent 系统提示词要点
 
-The system prompt sent to the LLM on every Agent request must include:
+每次 Agent 请求发送给 LLM 的系统提示词必须包含：
 
 ```
-You are a data analysis assistant connected to a ClickHouse database.
-Current table: {tableName}
-Schema: {columns.map(c => `${c.name}: ${c.type}`).join(', ')}
+你是一个连接到 ClickHouse 数据库的数据分析助手。
+当前表：{tableName}
+Schema：{columns.map(c => `${c.name}: ${c.type}`).join(', ')}
 
-Rules:
-1. When asked a question, generate a ClickHouse SQL query.
-2. Use the execute_sql tool to run the query.
-3. After getting results, explain them in natural language.
-4. If the result is suitable for visualization, include a visualization suggestion.
-5. Use ClickHouse-specific syntax where appropriate (e.g., arrayJoin, tuple, quantile).
-6. Always LIMIT results — default to 100 unless the user specifies otherwise.
+规则：
+1. 收到问题时，生成 ClickHouse SQL 查询。
+2. 使用 execute_sql 工具执行查询。
+3. 获取结果后，用自然语言解释。
+4. 如果结果适合可视化，附带可视化建议。
+5. 适当使用 ClickHouse 特定语法（如 arrayJoin、tuple、quantile）。
+6. 始终限制结果数量 —— 默认 100，除非用户另有指定。
 ```
 
-### Docker Deployment
+### Docker 部署
 
 ```dockerfile
 FROM node:20-alpine AS base
