@@ -12,10 +12,12 @@ A modern ClickHouse data exploration and visualization workbench built with Next
 ## Features
 
 - **SQL Console** — Write, run, and autocomplete SQL queries with syntax highlighting (CodeMirror + ClickHouse dialect)
-- **AI Agent Chat** — Natural language to SQL with automatic query execution, chart rendering, and drill-down analysis
-- **Data Grid** — Virtual-scrolling table with type-aware cell rendering
-- **Pivot Table** — Drag-and-drop pivot config panel powered by VTable
-- **Charts** — ECharts-based with 9 chart types (bar, line, area, pie, scatter, radar, radialBar, treemap, composed), flexible series composition, dataZoom, brush selection, toolbox, enhanced tooltip (percentage), click-to-drilldown
+- **AI Agent Chat** — Natural language to SQL with streaming output, automatic query execution, ECharts chart rendering, drill-down analysis; supports stop generation, copy/regenerate messages
+- **Data Grid** — Virtual-scrolling table with type-aware cell rendering, cross-column search, sorting
+- **Pivot Table** — Drag-and-drop config panel powered by VTable; supports row/column dimensions, indicators, calculated indicators, totals (row/column grand totals + subtotals), sorting, search, drill-down
+- **Charts** — ECharts-based with 9 chart types (bar, line, area, pie, scatter, radar, radialBar, treemap, composed), flexible series composition, dataZoom, brush selection, toolbox, magicType switching, enhanced tooltip (percentage), click-to-drilldown
+- **SQL History & Saved Queries** — Auto-save history, bookmark favorite queries
+- **LLM Settings** — OpenAI and Ollama providers with test connection
 - **Dual Theme** — VS Code themed SQL editor with custom syntax colors; system-aware dark/light mode
 - **Data Export** — CSV and JSON format export
 - **I18n** — Chinese and English interface
@@ -30,8 +32,9 @@ A modern ClickHouse data exploration and visualization workbench built with Next
 - **State**: Zustand (5 stores, persist middleware)
 - **Editor**: CodeMirror 6 (`@codemirror/lang-sql` + custom ClickHouse dialect)
 - **Theme**: Custom VS Code theme override with distinct keyword/identifier colors
-- **AI**: OpenAI-compatible / Ollama API with streaming JSON response
-- **Logging**: pino (backend) + custom client-logger (frontend)
+- **AI**: OpenAI-compatible / Ollama API with streaming JSON response, AbortController support
+- **Logging**: pino + pino-pretty (backend) + custom client-logger (frontend)
+- **Utilities**: sql-formatter (ClickHouse dialect formatting)
 
 ## Quick Start
 
@@ -96,7 +99,9 @@ src/
 │   ├── agent-chat.tsx    # AI chat with streaming + charts
 │   ├── chart.tsx         # ECharts wrapper (9 types + composed)
 │   ├── pivot-config.tsx  # Pivot table config panel
-│   └── column-renderer.tsx # Type-aware cell renderers
+│   ├── pivot-grid.tsx    # VTable pivot table renderer
+│   ├── column-renderer.tsx # Type-aware cell renderers
+│   └── settings-panel.tsx  # LLM settings dialog
 ├── lib/
 │   ├── clickhouse.ts     # ClickHouse client singleton
 │   ├── ch-dialect.ts     # Custom CodeMirror ClickHouse dialect
@@ -104,7 +109,13 @@ src/
 │   ├── vscode-theme-override.ts # Custom VS Code theme
 │   ├── logger.ts         # pino backend logger
 │   ├── client-logger.ts  # frontend localStorage logger
-│   └── i18n.ts           # Chinese/English dictionary
+│   ├── i18n.ts           # Chinese/English dictionary
+│   ├── agent-types.ts    # AI agent type definitions
+│   ├── viz-fix.ts        # Chart config inference & fixup
+│   ├── suggestions.ts    # Dynamic follow-up question generation
+│   ├── pivot-sql.ts      # Pivot table SQL generation
+│   ├── vtable-theme.ts   # VTable theme adapter
+│   └── llm-config.ts     # LLM config store
 └── stores/
     ├── dataset.ts        # Database/tables/schema state
     ├── query.ts          # SQL query state

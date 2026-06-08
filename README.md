@@ -12,10 +12,12 @@
 ## 功能特性
 
 - **SQL 控制台** — CodeMirror 编辑器 + ClickHouse 方言语法高亮 + 自动补全
-- **AI 代理助手** — 自然语言转 SQL，自动执行查询、渲染图表、下钻分析
-- **数据网格** — 虚拟滚动表格，类型感知单元格渲染
-- **透视表** — 拖拽配置面板，基于 VTable 实现
-- **图表** — 基于 ECharts，支持 9 种图表类型（柱状、折线、面积、饼图、散点、雷达、径向柱、矩形树、组合图），灵活 series 组合，dataZoom 缩放、brush 框选、toolbox 工具栏、Tooltip 增强（百分比）、点击下钻
+- **AI 代理助手** — 自然语言转 SQL，流式输出、自动执行查询、渲染 ECharts 图表、下钻分析，支持中断生成、复制/重新生成消息
+- **数据网格** — 虚拟滚动表格，类型感知单元格渲染，跨列搜索，排序
+- **透视表** — 拖拽配置面板，基于 VTable 实现，支持行/列维度、指标、计算指标、合计（行/列总计+小计）、排序、搜索、下钻
+- **图表** — 基于 ECharts，支持 9 种图表类型（柱状、折线、面积、饼图、散点、雷达、径向柱、矩形树、组合图），灵活 series 组合，dataZoom 缩放、brush 框选、toolbox 工具栏、magicType 类型切换、Tooltip 增强（百分比）、点击下钻
+- **SQL 历史 & 已存查询** — 自动保存历史，收藏常用 SQL
+- **LLM 设置** — 支持 OpenAI 和 Ollama 两种提供商，內建连接测试
 - **双主题** — VS Code 风格 SQL 编辑器，自定义关键字/标识符颜色区分，跟随系统亮暗切换
 - **数据导出** — CSV / JSON 格式
 - **国际化** — 中文 / 英文界面
@@ -30,8 +32,9 @@
 - **状态管理**: Zustand（5 个 store，部分持久化）
 - **编辑器**: CodeMirror 6（`@codemirror/lang-sql` + 自定义 ClickHouse 方言）
 - **主题**: 自定义 VS Code 主题覆盖，区分关键字和标识符颜色
-- **AI**: OpenAI 兼容 / Ollama API，流式 JSON 响应
-- **日志**: pino（后端）+ 自定义 client-logger（前端）
+- **AI**: OpenAI 兼容 / Ollama API，流式 JSON 响应，AbortController 中断支持
+- **日志**: pino + pino-pretty（后端）+ 自定义 client-logger（前端）
+- **工具库**: sql-formatter（ClickHouse 方言格式化）
 
 ## 快速开始
 
@@ -96,7 +99,9 @@ src/
 │   ├── agent-chat.tsx    # AI 对话 + 流式渲染 + 图表
 │   ├── chart.tsx         # ECharts 封装（9 种图表 + 组合图）
 │   ├── pivot-config.tsx  # 透视表配置面板
-│   └── column-renderer.tsx # 类型感知单元格渲染
+│   ├── pivot-grid.tsx    # VTable 透视表渲染
+│   ├── column-renderer.tsx # 类型感知单元格渲染
+│   └── settings-panel.tsx  # LLM 设置对话框
 ├── lib/
 │   ├── clickhouse.ts     # ClickHouse 客户端单例
 │   ├── ch-dialect.ts     # CodeMirror ClickHouse 方言
@@ -104,7 +109,13 @@ src/
 │   ├── vscode-theme-override.ts # 自定义 VS Code 主题
 │   ├── logger.ts         # pino 后端日志
 │   ├── client-logger.ts  # 前端 localStorage 日志
-│   └── i18n.ts           # 中英文词典
+│   ├── i18n.ts           # 中英文词典
+│   ├── agent-types.ts    # AI Agent 类型定义
+│   ├── viz-fix.ts        # 图表配置推断与修正
+│   ├── suggestions.ts    # 动态 follow-up 建议生成
+│   ├── pivot-sql.ts      # 透视表 SQL 生成
+│   ├── vtable-theme.ts   # VTable 主题适配
+│   └── llm-config.ts     # LLM 配置 store
 └── stores/
     ├── dataset.ts        # 数据库/表/Schema 状态
     ├── query.ts          # SQL 查询状态
