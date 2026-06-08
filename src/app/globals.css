@@ -153,3 +153,24 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes snake {
+  0%   { stroke-dashoffset: 0; }
+  5%   { stroke-dashoffset: -10; }
+  25%  { stroke-dashoffset: -10; }
+  30%  { stroke-dashoffset: -20; }
+  50%  { stroke-dashoffset: -20; }
+  55%  { stroke-dashoffset: -30; }
+  75%  { stroke-dashoffset: -30; }
+  80%  { stroke-dashoffset: -40; }
+  100% { stroke-dashoffset: -40; }
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-slide-in {
+  animation: fadeSlideIn 0.25s ease-out;
+}

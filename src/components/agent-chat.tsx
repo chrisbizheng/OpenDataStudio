@@ -1,14 +1,24 @@
 "use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
+
+function SnakeSpinner({ size = 12 }: { size?: number }) {
+  const s = size - 2
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ animation: "snake 1.2s linear infinite" }}>
+      <rect x="1" y="1" width={s} height={s} rx="1" fill="none" stroke="currentColor" className="text-muted-foreground/20" strokeWidth="1.5" />
+      <rect x="1" y="1" width={s} height={s} rx="1" fill="none" stroke="currentColor" className="text-muted-foreground/80" strokeWidth="1.5" strokeDasharray="2 2.5" strokeLinecap="round" />
+    </svg>
+  )
+}
 import ReactMarkdown from "react-markdown"
 import { useLang } from "@/components/lang-provider"
 import { Chart } from "@/components/chart"
 import { useAgentChatsStore, buildChatKey } from "@/stores/agent-chats"
-import { appLog, downloadLogs, getTraceId } from "@/lib/client-logger"
+import { appLog, getTraceId } from "@/lib/client-logger"
 import { parseSSEStream } from "@/lib/sse-parser"
 import { extractField, stripMarkdownTables } from "@/lib/llm-response"
-import { suggestQuestions } from "@/lib/suggestions"
+import { suggestQuestions, suggestFollowUp } from "@/lib/suggestions"
 import type { Message } from "@/lib/agent-types"
 
 interface AgentChatProps {
@@ -40,6 +50,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
     item: { key: string; value: number; row: Record<string, unknown> }
   } | null>(null)
   const chatRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const suggestions = useMemo(() => schema && schema.length > 0 ? suggestQuestions(schema, lang) : [], [schema, lang])
   const prevCountRef = useRef(0)
@@ -82,17 +93,19 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
     }
   }, [messages])
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string, baseMessages?: Message[]) => {
     if (!text.trim() || isLoading) return
 
+    const prevMessages = baseMessages ?? messages
     const userMsg: Message = { role: "user", content: text }
     const placeholderMsg: Message = {
       role: "assistant",
       content: "",
       thinkingExpanded: true,
+      thinkingStartTime: Date.now(),
       streamingContent: "",
     }
-    const updated = [...messages, userMsg]
+    const updated = [...prevMessages, userMsg]
     setMessages([...updated, placeholderMsg])
     setInput("")
     setIsLoading(true)
@@ -117,8 +130,12 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
       const traceId = getTraceId()
       appLog("[Agent]", traceId, "send:", text.slice(0, 80))
 
+      const controller = new AbortController()
+      abortRef.current = controller
+
       const res = await fetch("/api/agent/chat", {
         method: "POST",
+        signal: controller.signal,
         headers: {
           "Content-Type": "application/json",
           "x-llm-config": btoa(JSON.stringify(llmConfig)),
@@ -175,6 +192,10 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             last.columns = (d.columns as string[]) || undefined
             last.visualization = (d.visualization as Message["visualization"]) ?? null
             last.thinkingExpanded = false
+            last.streamingContent = undefined
+            if (last.thinkingStartTime) {
+              last.thinkingElapsedMs = Date.now() - last.thinkingStartTime
+            }
             next[next.length - 1] = last
             return next
           })
@@ -187,19 +208,38 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             const last = { ...next[next.length - 1] }
             last.content = (d.message as string) || "Unknown error"
             last.thinkingExpanded = false
+            last.streamingContent = undefined
             next[next.length - 1] = last
             return next
           })
         }
       }
     } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Network error: ${e instanceof Error ? e.message : "Unknown"}` },
-      ])
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setMessages((prev) => {
+          const next = [...prev]
+          const last = { ...next[next.length - 1] }
+          if (!last.content) last.content = lang === "zh" ? "已停止生成" : "Generation stopped"
+          if (last.thinkingStartTime) last.thinkingElapsedMs = Date.now() - last.thinkingStartTime
+          last.thinkingExpanded = false
+          last.streamingContent = undefined
+          next[next.length - 1] = last
+          return next
+        })
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Network error: ${e instanceof Error ? e.message : "Unknown"}` },
+        ])
+      }
     } finally {
+      abortRef.current = null
       setIsLoading(false)
     }
+  }
+
+  const stopGeneration = () => {
+    abortRef.current?.abort()
   }
 
   const generateProfile = async () => {
@@ -240,20 +280,13 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
           >
             {_t("agent.generate_profile")}
           </button>
-          <button
-            onClick={downloadLogs}
-            className="text-[10px] text-muted-foreground hover:text-foreground"
-            title="下载日志"
-          >
-            📋
-          </button>
         </div>
       </div>
       <div className="flex-1 overflow-auto p-2 space-y-3" ref={chatRef}>
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={`text-xs ${msg.role === "user" ? "text-right" : "text-left"}`}
+            className={`text-xs animate-fade-slide-in ${msg.role === "user" ? "text-right" : "text-left"}`}
           >
             {msg.role === "user" ? (
               <div className="inline-block bg-primary/10 text-foreground rounded-lg px-3 py-1.5 max-w-[85%] text-left">
@@ -274,15 +307,17 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                       className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors w-full text-left"
                     >
                       <span className="text-[10px] inline-block transition-transform duration-200" style={{ transform: msg.thinkingExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}>▼</span>
-                      {msg.thinkingExpanded !== true && isLoading && i === messages.length - 1 ? (
-                        <>
-                          <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                          <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                          <span className="inline-block w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                        </>
+                      {isLoading && i === messages.length - 1 ? (
+                        <SnakeSpinner size={12} />
                       ) : null}
                       <span className="ml-1">
-                        {msg.thinkingExpanded ? _t("agent.thinking_process") : _t("agent.thinking")}
+                        {(() => {
+                          const isThinking = isLoading && i === messages.length - 1
+                          if (isThinking) return lang === "zh" ? "思考中" : "Thinking"
+                          const elapsed = msg.thinkingElapsedMs ?? (msg.thinkingStartTime ? Date.now() - msg.thinkingStartTime : 0)
+                          const timeStr = elapsed >= 1000 ? `${(elapsed / 1000).toFixed(1)}s` : `${elapsed}ms`
+                          return lang === "zh" ? `已思考 ${timeStr}` : `Thought ${timeStr}`
+                        })()}
                       </span>
                     </button>
                     <div
@@ -318,11 +353,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                                         )}
                                       </div>
                                     ) : (
-                                      <div className="flex items-center gap-1.5 italic">
-                                        <span className="inline-block w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                                        <span className="inline-block w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                                        <span className="inline-block w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                                        <span className="ml-1">{_t("agent.waiting_llm")}</span>
+                                      <div className="flex items-center gap-1.5 italic text-muted-foreground/60">
+                                        {lang === "zh" ? "等待 LLM 响应" : "Waiting for LLM"}
                                       </div>
                                     )}
                                     {json.length > 0 && (
@@ -352,10 +384,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                           ) : (
                           <>
                             <div className="flex items-center gap-1">
-                              <span className="inline-block w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                              <span className="inline-block w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                              <span className="inline-block w-1.5 h-1.5 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                              <span className="ml-1">{_t("agent.thinking")}</span>
+                              <SnakeSpinner size={12} />
+                              <span className="ml-1">{lang === "zh" ? "思考中" : "Thinking"}</span>
                             </div>
                           </>
                         )}
@@ -378,7 +408,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                     <pre>{msg.sql}</pre>
                   </div>
                 )}
-                {msg.visualization && msg.visualization.config?.xKey && msg.visualization.config?.yKey && msg.rows && msg.columns && msg.rows.length > 0 && (
+                {msg.visualization && msg.visualization.config?.xKey && (msg.visualization.config?.yKey || msg.visualization.config?.series?.length) && msg.rows && msg.columns && msg.rows.length > 0 && (
                   <>
                     <Chart
                       data={msg.rows.map((row) =>
@@ -388,12 +418,13 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                         type: msg.visualization.type || "bar",
                         xKey: msg.visualization.config.xKey,
                         yKey: msg.visualization.config.yKey,
+                        series: msg.visualization.config.series,
                         title: msg.visualization.config.title,
                       }}
                       onClick={(item) => setClickedChart({ messageIndex: i, item })}
                     />
                     {clickedChart?.messageIndex === i && (
-                      <div className="border border-border rounded p-2 space-y-2">
+                      <div className="border border-border rounded p-2 space-y-2 animate-fade-slide-in">
                         <div className="flex items-center gap-2 text-xs">
                           <span className="font-semibold text-foreground">{clickedChart.item.key}</span>
                           <span className="text-muted-foreground">→</span>
@@ -431,8 +462,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                                   const xKey = msg.visualization!.config.xKey
                                   const idx = msg.columns!.indexOf(xKey)
                                   if (idx >= 0 && String(row[idx]) === clickedChart.item.key) return true
-                                  const yKey = msg.visualization!.config.yKey
-                                  const dimCols = msg.columns!.filter((c) => c !== yKey)
+                                  const yKeys = msg.visualization!.config.series?.map((s) => s.yKey) ?? (msg.visualization!.config.yKey ? [msg.visualization!.config.yKey] : [])
+                                  const dimCols = msg.columns!.filter((c) => !yKeys.includes(c))
                                   const reconstructed = dimCols.slice(0, 3).map((c) => String(row[msg.columns!.indexOf(c)] ?? "")).join(" · ")
                                   return reconstructed === clickedChart.item.key
                                 })
@@ -484,20 +515,81 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                     )}
                   </div>
                 )}
+                {!msg.streamingContent && msg.role === "assistant" && msg.content && msg.content !== "Done." && (msg.sql || msg.rows) && (
+                  <div className="flex items-center gap-1 mt-1 animate-fade-slide-in">
+                    <button
+                      onClick={() => {
+                        const parts: string[] = []
+                        if (msg.content && msg.content !== "Done.") parts.push(msg.content)
+                        if (msg.sql) parts.push(`\n\`\`\`sql\n${msg.sql}\n\`\`\``)
+                        if (msg.columns && msg.rows && msg.rows.length > 0) {
+                          parts.push(`\n| ${msg.columns.join(" | ")} |`)
+                          parts.push(`| ${msg.columns.map(() => "---").join(" | ")} |`)
+                          for (const row of msg.rows.slice(0, 20)) {
+                            parts.push(`| ${row.map((c) => String(c ?? "")).join(" | ")} |`)
+                          }
+                          if (msg.rows.length > 20) parts.push(`\n*${msg.rows.length} rows total*`)
+                        }
+                        navigator.clipboard.writeText(parts.join("\n"))
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-muted hover:shadow-sm"
+                      title={lang === "zh" ? "复制" : "Copy"}
+                    >
+                      <svg className="inline-block w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V3.5A1.5 1.5 0 0 1 4.5 2H11"/></svg>{lang === "zh" ? "复制" : "Copy"}
+                    </button>
+                    <span className="text-muted-foreground/30">·</span>
+                    <button
+                      onClick={() => {
+                        const userMsg = messages[i - 1]
+                        if (userMsg?.role === "user") {
+                          sendMessage(userMsg.content, messages.slice(0, i - 1))
+                        }
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-muted hover:shadow-sm"
+                      title={lang === "zh" ? "重新生成" : "Regenerate"}
+                    >
+                      <svg className="inline-block w-3 h-3 mr-0.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1.5 8a6.5 6.5 0 0 1 11.3-4.4"/><path d="M14.5 8a6.5 6.5 0 0 1-11.3 4.4"/><path d="M12.5 1v3.3h-3.3"/><path d="M3.5 15V11.7h3.3"/></svg>{lang === "zh" ? "重新生成" : "Regenerate"}
+                    </button>
+                  </div>
+                )}
+                {!isLoading && i === messages.length - 1 && msg.sql && (() => {
+                  const userMsg = messages[i - 1]
+                  if (!userMsg || userMsg.role !== "user") return null
+                  const hasLaterUserMsg = messages.slice(i + 1).some((m) => m.role === "user")
+                  if (hasLaterUserMsg) return null
+                  const followUps = suggestFollowUp(userMsg.content, msg.sql, msg.columns, lang)
+                  if (followUps.length === 0) return null
+                  return (
+                    <div className="space-y-1 mt-3 pt-2 border-t border-border/50 animate-fade-slide-in">
+                      <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
+                      {followUps.map((q, fi) => (
+                        <button
+                          key={fi}
+                          onClick={() => sendMessage(q)}
+                          className="flex items-center gap-1.5 w-full text-left text-[10px] px-2 py-1.5 rounded bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <span className="text-primary shrink-0">›</span>
+                          <span className="truncate">{q}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
         ))}
         {!isLoading && messages.length === 1 && tableName && suggestions.length > 0 && (
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 mt-2 animate-fade-slide-in">
             <div className="text-[10px] text-muted-foreground font-medium">{_t("agent.try_asking")}</div>
             {suggestions.map((q, i) => (
               <button
                 key={i}
                 onClick={() => sendMessage(q)}
-                className="block w-full text-left text-[10px] px-2 py-1.5 rounded bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors truncate"
+                className="flex items-center gap-1.5 w-full text-left text-[10px] px-2 py-1.5 rounded bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
               >
-                {q}
+                <span className="text-primary shrink-0">›</span>
+                <span className="truncate">{q}</span>
               </button>
             ))}
           </div>
@@ -512,21 +604,31 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                sendMessage(input)
+                if (isLoading) stopGeneration()
+                else sendMessage(input)
               }
             }}
             placeholder={_t("agent.placeholder")}
-            disabled={isLoading}
+            disabled={isLoading && !abortRef.current}
             aria-label={_t("agent.placeholder")}
             className="flex-1 px-2 py-1.5 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-ring disabled:opacity-50"
           />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isLoading}
-            className="px-2.5 py-1.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {_t("agent.send")}
-          </button>
+          {isLoading ? (
+            <button
+              onClick={stopGeneration}
+              className="px-2.5 py-1.5 text-xs rounded bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {lang === "zh" ? "停止" : "Stop"}
+            </button>
+          ) : (
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim()}
+              className="px-2.5 py-1.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {_t("agent.send")}
+            </button>
+          )}
         </div>
       </div>
     </div>

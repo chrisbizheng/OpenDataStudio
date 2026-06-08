@@ -19,16 +19,26 @@ export interface Message {
   columns?: string[]
   visualization?: VisualizationConfig | null
   thinkingExpanded?: boolean
+  thinkingStartTime?: number
+  thinkingElapsedMs?: number
   streamingContent?: string
+}
+
+export interface SeriesConfig {
+  yKey: string
+  chartType?: string
+  label?: string
 }
 
 export interface VisualizationConfig {
   type: string
   config: {
     xKey: string
-    yKey: string
+    yKey?: string
+    series?: SeriesConfig[]
     title?: string
     showLegend?: boolean
+    height?: number
   }
 }
 

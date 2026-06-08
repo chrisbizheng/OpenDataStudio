@@ -7,8 +7,20 @@ export interface AgentMessage {
   sql?: string
   rows?: unknown[][]
   columns?: string[]
-  visualization?: { type: string; config: { xKey: string; yKey: string; title?: string } } | null
+  visualization?: {
+    type: string
+    config: {
+      xKey: string
+      yKey?: string
+      series?: { yKey: string; chartType?: string; label?: string }[]
+      title?: string
+      showLegend?: boolean
+      height?: number
+    }
+  } | null
   thinkingExpanded?: boolean
+  thinkingStartTime?: number
+  thinkingElapsedMs?: number
   streamingContent?: string
 }
 

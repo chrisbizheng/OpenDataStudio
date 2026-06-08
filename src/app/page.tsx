@@ -454,24 +454,20 @@ export default function Home() {
             )}
           </main>
 
-          {rightPanelOpen && (
-            <>
-            <ResizeHandle onResize={(w) => setRightPanelWidth(Math.max(200, Math.min(800, w)))} />
-            <aside
-              className="shrink-0 border-l border-border overflow-hidden"
-              style={{ width: rightPanelWidth }}
-            >
-              <div className="h-full overflow-auto">
-                <AgentChat
-                  tableName={selectedTable}
-                  schema={schema}
-                  selectedDatabase={selectedDatabase}
-                  onSqlGenerated={handleAgentSqlGenerated}
-                />
-              </div>
-            </aside>
-            </>
-          )}
+          {rightPanelOpen && <ResizeHandle onResize={(w) => setRightPanelWidth(Math.max(200, Math.min(800, w)))} />}
+          <aside
+            className="shrink-0 border-l border-border overflow-hidden transition-all duration-300 ease-in-out"
+            style={{ width: rightPanelOpen ? rightPanelWidth : 0 }}
+          >
+            <div className="h-full overflow-auto" style={{ width: rightPanelWidth }}>
+              <AgentChat
+                tableName={selectedTable}
+                schema={schema}
+                selectedDatabase={selectedDatabase}
+                onSqlGenerated={handleAgentSqlGenerated}
+              />
+            </div>
+          </aside>
         </div>
 
         <StatusBar />

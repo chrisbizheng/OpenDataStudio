@@ -1,4 +1,22 @@
-type RawViz = { type?: string; config?: { xKey?: string; yKey?: string; title?: string; showLegend?: boolean } } | null | undefined
+interface SeriesConfig {
+  yKey: string
+  chartType?: string
+  label?: string
+}
+
+type RawViz = {
+  type?: string
+  config?: {
+    xKey?: string
+    yKey?: string
+    series?: SeriesConfig[]
+    title?: string
+    showLegend?: boolean
+    height?: number
+  }
+} | null | undefined
+
+const METRIC_PATTERN = /^(sum|total|avg|min|max|count|amount|qty|quantity|sales|revenue|sold|units)/i
 
 export function fixVisualization(
   rawViz: RawViz,
@@ -8,12 +26,42 @@ export function fixVisualization(
   if (!columns || columns.length === 0) return rawViz
 
   const cfg = rawViz.config
+
+  // Validate series if present
+  if (cfg.series && cfg.series.length > 0) {
+    const validSeries = cfg.series.filter((s) => columns.includes(s.yKey))
+    if (validSeries.length === 0) {
+      // All series invalid — fall back to auto-detect
+      const numericCol = columns.find((c) => METRIC_PATTERN.test(c)) || columns[columns.length - 1]
+      const labelCol = columns.find((c) => c !== numericCol) || columns[0]
+      return {
+        ...rawViz,
+        config: {
+          xKey: cfg.xKey && columns.includes(cfg.xKey) ? cfg.xKey : labelCol,
+          yKey: numericCol,
+          title: cfg.title,
+          showLegend: cfg.showLegend,
+        },
+      }
+    }
+    const xOk = cfg.xKey && columns.includes(cfg.xKey)
+    return {
+      ...rawViz,
+      config: {
+        ...cfg,
+        xKey: xOk ? cfg.xKey : columns.find((c) => !validSeries.some((s) => s.yKey === c)) || columns[0],
+        series: validSeries,
+      },
+    }
+  }
+
+  // Single yKey validation (original logic)
   const xOk = cfg.xKey && columns.includes(cfg.xKey)
   const yOk = cfg.yKey && columns.includes(cfg.yKey)
   if (xOk && yOk) return rawViz
 
   const numericCol = columns.find((c) =>
-    c === cfg.yKey || /^(sum|total|avg|min|max|count|amount|qty|quantity|sales|revenue|sold|units)/i.test(c)
+    c === cfg.yKey || METRIC_PATTERN.test(c)
   ) || columns[columns.length - 1]
   const labelCol = columns.find((c) => c !== numericCol) || columns[0]
 
@@ -44,11 +92,24 @@ export function inferVisualization(
 
   if (groupCols.length === 0) return null
 
-  const metricPattern = /^(sum|total|avg|min|max|count|amount|qty|quantity|sales|revenue|sold|units)/i
-  const metricCol = columns.find((c) => metricPattern.test(c))
-  if (!metricCol) return null
-
+  const metricCols = columns.filter((c) => METRIC_PATTERN.test(c))
   const dimCol = groupCols[0]
+
+  // Multi-metric: generate series for composed chart
+  if (metricCols.length >= 2) {
+    return {
+      type: "composed",
+      config: {
+        xKey: dimCol,
+        series: metricCols.map((mc) => ({ yKey: mc })),
+        title: undefined,
+        showLegend: true,
+      },
+    }
+  }
+
+  const metricCol = metricCols[0] || columns[columns.length - 1]
+  if (!metricCol) return null
 
   return {
     type: "bar",

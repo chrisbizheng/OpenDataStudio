@@ -59,28 +59,48 @@ Rules:
 IMPORTANT — follow this mapping based on your SQL structure:
 
 | SQL 结构 | 推荐图表 |
-| GROUP BY 单字段 + 多指标 | "composed" (bar+line 组合图) |
-| GROUP BY 单字段 + 1 绝对值 + 1 占比 | "composed" |
+| GROUP BY 单字段 + 1 指标 | "bar" (xKey=dim, yKey=metric) |
+| GROUP BY 单字段 + 多指标 | "composed" with series (see below) |
+| GROUP BY 单字段 + 1 绝对值 + 1 占比 | "composed" with series |
 | GROUP BY 两字段（层级/交叉分组） | "bar" — xKey = first GROUP BY field, yKey = metric. DO NOT use concat() in SQL! SELECT each GROUP BY field separately. Example: SELECT segment, category, SUM(x) AS total FROM ... GROUP BY segment, category |
-| GROUP BY 时间列 + 多指标 | "composed"（首选） |
+| GROUP BY 时间列 + 多指标 | "composed" with series（首选） |
+| GROUP BY 时间列 + 1 指标 | "line" or "area" |
 | GROUP BY 分类列 + 看分布结构 | "bar" — bar chart with xKey=category, yKey=metric, show how categories rank/comparison |
 | 单维度排名/比较 | "bar" |
 | 时间序列趋势 | "line" or "area" |
-| 占比（≤8 份）| "pie" |
+| 占比/百分比/比例/分布（≤10 份）| "pie" — always use pie when user asks about percentage, proportion, ratio, distribution, share, composition |
 | 双指标相关性 | "scatter" |
 | 用户明确要求层级/树状展示 | "treemap" |
 
+PIE CHART triggers — use "pie" when the user's question contains ANY of these words: 百分比, 占比, 比例, 分布, 份额, 构成, 占多少, 多少比例, percentage, proportion, ratio, distribution, share, composition, breakdown. Also use "pie" when the user asks "X占Y的多少" or "各X的占比". In the SQL, calculate the actual percentage using: ROUND(SUM(x) * 100.0 / (SELECT SUM(x) FROM ...), 2) AS pct.
+
+COMPOSED CHART with series — when your SQL has multiple metric columns, use the "series" field instead of a single "yKey":
+{
+  "type": "composed",
+  "config": {
+    "xKey": "month",
+    "series": [
+      { "yKey": "sales", "chartType": "bar", "label": "Sales" },
+      { "yKey": "target", "chartType": "line", "label": "Target" }
+    ],
+    "title": "Sales vs Target",
+    "showLegend": true
+  }
+}
+Each series entry can specify chartType: "bar", "line", "area" (default: first is bar, rest are line).
+If you only have one metric, use the simple yKey format instead.
+
 CRITICAL: The "type" field in JSON MUST match this table. If your SQL has GROUP BY with 2+ non-time columns and the user wants a ranking/comparison, use "bar" with xKey as the first dimension column. Use "treemap" ONLY when the user explicitly asks for a tree/hierarchy/structure view.
 NEVER use concat() in SQL. When GROUP BY has multiple columns (e.g. segment, category), SELECT each column separately: SELECT segment, category, SUM(x) AS total. The chart system will automatically combine them. Using concat() breaks the chart grouping.
-7. Always LIMIT results — default to 100 unless specified.
-8. Return your response in JSON format with these fields IN THIS ORDER (reasoning first so it streams first):
+8. Always LIMIT results — default to 100 unless specified.
+9. Return your response in JSON format with these fields IN THIS ORDER (reasoning first so it streams first):
    {
      "reasoning": "Step-by-step analysis: 1) understand user intent; 2) identify which columns/tables apply; 3) explain why this SQL structure (joins, aggregates, filters, ordering, limits); 4) what the result will look like; 5) why this chart type fits. Be thorough — at least 3-5 sentences.",
      "sql": "...",
      "message": "...",
      "visualization": { "type": "bar", "config": { "xKey": "...", "yKey": "...", "title": "...", "showLegend": true } } | null
    }
-9. The "reasoning" field MUST come first in the JSON — it shows in the thinking panel as it streams. The "message" field is the final user-facing reply.`
+10. The "reasoning" field MUST come first in the JSON — it shows in the thinking panel as it streams. The "message" field is the final user-facing reply.`
 
     const payload = {
       model: llmConfig.model || "gpt-4o",
