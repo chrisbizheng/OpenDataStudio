@@ -7,6 +7,7 @@ import { getVTableTheme } from "@/lib/vtable-theme"
 import type { PivotConfig } from "@/lib/pivot-sql"
 import type { ColumnMeta } from "@/lib/clickhouse"
 import { useLang } from "@/components/lang-provider"
+import { SearchBar } from "@/components/search-bar"
 
 interface PivotGridProps {
   config: PivotConfig
@@ -269,24 +270,7 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
   return (
     <div className="flex flex-col h-full gap-2">
       <div className="flex items-center gap-2 shrink-0">
-        <div className="relative flex-1 max-w-sm">
-          <svg
-            className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-          </svg>
-          <input
-            type="text"
-            placeholder={_t("search.placeholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-7 pr-2 py-1 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-ring"
-          />
-        </div>
+        <SearchBar value={searchQuery} onChange={setSearchQuery} />
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
           {filteredAndSortedData.rows.length} {_t("pivot.rows")}
           {filteredAndSortedData.rows.length < data.rows.length

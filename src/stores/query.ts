@@ -1,4 +1,6 @@
 import { create } from "zustand"
+import { executeQuery } from "@/lib/api-client"
+import { buildSelectSql } from "@/lib/query-builder"
 
 export interface TableData {
   columns: string[]
@@ -31,6 +33,12 @@ interface QueryState {
 
 let abortController: AbortController | null = null
 
+function createAbortController(): AbortController {
+  if (abortController) abortController.abort()
+  abortController = new AbortController()
+  return abortController
+}
+
 export const useQueryStore = create<QueryState>((set, get) => ({
   currentTable: null,
   data: null,
@@ -48,15 +56,12 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   loadMore: async () => {
     const { currentTable, loadedRows, executeQuery } = get()
     if (!currentTable) return
-    const offset = loadedRows
-    const sql = `SELECT * FROM ${currentTable} LIMIT 1000 OFFSET ${offset}`
-    await executeQuery(sql, currentTable, true)
+    const sql = buildSelectSql(currentTable.split(".")[0] || "", currentTable.split(".")[1] || currentTable, { limit: 1000 })
+    const offsetSql = sql.replace(/LIMIT \d+$/, `LIMIT 1000 OFFSET ${loadedRows}`)
+    await executeQuery(offsetSql, currentTable, true)
   },
   executeQuery: async (sql, tableName, append = false) => {
-    if (abortController) {
-      abortController.abort()
-    }
-    abortController = new AbortController()
+    const controller = createAbortController()
 
     if (!append) {
       set({ isExecuting: true, error: null, currentTable: tableName })
@@ -64,17 +69,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
       set({ isExecuting: true, error: null })
     }
     try {
-      const res = await fetch("/api/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sql }),
-        signal: abortController.signal,
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        set({ error: json.message || "Query failed", isExecuting: false })
-        return
-      }
+      const json = await executeQuery(sql, undefined, controller.signal)
       const newRows = json.rows as unknown[][]
       if (append && get().data) {
         const state = get()

@@ -1,54 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { create } from "zustand"
-import { persist } from "zustand/middleware"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLang } from "@/components/lang-provider"
-
-interface LlmConfig {
-  provider: string
-  apiKey: string
-  baseUrl: string
-  model: string
-}
-
-interface LlmState {
-  config: LlmConfig
-  setConfig: (config: LlmConfig) => void
-}
-
-const defaultConfig: LlmConfig = {
-  provider: "openai",
-  apiKey: "",
-  baseUrl: "https://api.openai.com/v1",
-  model: "gpt-4o",
-}
-
-export const useLlmStore = create<LlmState>()(
-  persist(
-    (set) => ({
-      config: defaultConfig,
-      setConfig: (config) => set({ config }),
-    }),
-    { name: "llm-config" }
-  )
-)
-
-export function getLlmHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {}
-  try {
-    const config = useLlmStore.getState().config
-    if (!config.apiKey) return {}
-    return { "x-llm-config": btoa(JSON.stringify(config)) }
-  } catch {
-    return {}
-  }
-}
+import { useLlmStore } from "@/stores/llm-config"
+import type { LlmConfig } from "@/lib/agent-types"
 
 export function SettingsDialog() {
   const { _t } = useLang()

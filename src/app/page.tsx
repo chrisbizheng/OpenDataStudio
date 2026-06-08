@@ -25,6 +25,10 @@ import { useSavedQueriesStore } from "@/stores/saved-queries"
 import { usePivotStore } from "@/stores/pivot"
 import { generatePivotSQL } from "@/lib/pivot-sql"
 import type { PivotConfig } from "@/lib/pivot-sql"
+import { executeQuery as apiQuery } from "@/lib/api-client"
+import { exportData } from "@/lib/export"
+import { buildSelectSql, buildDrilldownSql, buildSortDirection } from "@/lib/query-builder"
+import { ResizeHandle } from "@/components/resize-handle"
 
 export default function Home() {
   const { _t } = useLang()
@@ -123,8 +127,7 @@ export default function Home() {
 
   useEffect(() => {
     if (selectedTable && selectedDatabase) {
-      const q = `${selectedDatabase}.${selectedTable}`
-      executeQuery(`SELECT * FROM ${q} LIMIT 1000`, q)
+      executeQuery(buildSelectSql(selectedDatabase, selectedTable), `${selectedDatabase}.${selectedTable}`)
     }
     pivotStore.reset()
     setDrilldownData(null)
@@ -133,23 +136,18 @@ export default function Home() {
   const handleSort = useCallback(
     (column: string) => {
       if (!selectedTable || !selectedDatabase) return
-      const q = `${selectedDatabase}.${selectedTable}`
-      const newDir =
-        sort.column === column
-          ? sort.direction === "asc"
-            ? "desc"
-            : sort.direction === "desc"
-              ? null
-              : "asc"
-          : "asc"
+      const newDir = buildSortDirection(sort.column, sort.direction, column)
       setSort({ column, direction: newDir })
       if (newDir) {
         executeQuery(
-          `SELECT * FROM ${q} ORDER BY ${column} ${newDir.toUpperCase()} LIMIT 1000`,
-          q
+          buildSelectSql(selectedDatabase, selectedTable, { orderBy: column, direction: newDir.toUpperCase() as "ASC" | "DESC" }),
+          `${selectedDatabase}.${selectedTable}`
         )
       } else {
-      executeQuery(`SELECT * FROM ${q} LIMIT 1000`, q)
+        executeQuery(
+          buildSelectSql(selectedDatabase, selectedTable),
+          `${selectedDatabase}.${selectedTable}`
+        )
       }
     },
     [selectedTable, selectedDatabase, sort, executeQuery, setSort]
@@ -179,32 +177,12 @@ export default function Home() {
 
   const handleCopyCsv = useCallback(() => {
     if (!data || !selectedTable) return
-    const header = data.columns.join(",")
-    const rows = data.rows
-      .map((r) =>
-        r
-          .map((c) => {
-            const s = String(c ?? "")
-            return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
-          })
-          .join(",")
-      )
-      .join("\n")
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:]/g, "-")
-    download(`${selectedTable}_${loadedRows}rows_${ts}.csv`, `${header}\n${rows}`, "text/csv")
+    exportData(selectedTable, loadedRows, data.columns, data.rows, "csv")
   }, [data, selectedTable, loadedRows])
 
   const handleCopyJson = useCallback(() => {
     if (!data || !selectedTable) return
-    const json = JSON.stringify(
-      data.rows.map((r) =>
-        Object.fromEntries(data.columns.map((c, i) => [c, r[i]]))
-      ),
-      null,
-      2
-    )
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:]/g, "-")
-    download(`${selectedTable}_${loadedRows}rows_${ts}.json`, json, "application/json")
+    exportData(selectedTable, loadedRows, data.columns, data.rows, "json")
   }, [data, selectedTable, loadedRows])
 
   const handleAgentSqlGenerated = useCallback(
@@ -259,22 +237,10 @@ export default function Home() {
     async (params: { dimensionValues: Record<string, unknown>; indicatorKey: string }) => {
       if (!selectedTable || !selectedDatabase) return
       setDrilldownData({ columns: [], rows: [], isLoading: true })
-      const conditions = Object.entries(params.dimensionValues)
-        .map(([k, v]) => `\`${k}\` = '${String(v).replace(/'/g, "''")}'`)
-        .join(" AND ")
-      const sql = `SELECT * FROM \`${selectedDatabase}\`.\`${selectedTable}\`${conditions ? ` WHERE ${conditions}` : ""} LIMIT 10000`
+      const sql = buildDrilldownSql(selectedDatabase, selectedTable, params.dimensionValues)
       try {
-        const res = await fetch("/api/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sql, database: selectedDatabase }),
-        })
-        const json = await res.json()
-        if (res.ok) {
-          setDrilldownData({ columns: json.columns, rows: json.rows, isLoading: false })
-        } else {
-          setDrilldownData({ columns: [], rows: [], isLoading: false })
-        }
+        const json = await apiQuery(sql, selectedDatabase)
+        setDrilldownData({ columns: json.columns, rows: json.rows, isLoading: false })
       } catch {
         setDrilldownData({ columns: [], rows: [], isLoading: false })
       }
@@ -550,34 +516,4 @@ export default function Home() {
       )}
     </ErrorBoundary>
   )
-}
-
-function ResizeHandle({ onResize }: { onResize: (w: number) => void }) {
-  return (
-    <div
-      className="w-1 shrink-0 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
-      onMouseDown={(e) => {
-        e.preventDefault()
-        const startX = e.clientX
-        const aside = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null
-        const startW = aside?.offsetWidth ?? 380
-        const onMove = (ev: MouseEvent) => onResize(Math.max(200, Math.min(800, startW - (ev.clientX - startX))))
-        const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp) }
-        document.addEventListener("mousemove", onMove)
-        document.addEventListener("mouseup", onUp)
-      }}
-    />
-  )
-}
-
-function download(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
 }

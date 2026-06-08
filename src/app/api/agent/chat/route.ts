@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/lib/clickhouse"
 import { format } from "sql-formatter"
 import { logger } from "@/lib/logger"
+import { streamLLM } from "@/lib/sse-parser"
+import { parseResponse } from "@/lib/llm-response"
+import { fixVisualization, fixConcatSql, inferVisualization } from "@/lib/viz-fix"
+import type { ChatContext } from "@/lib/agent-types"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,122 +13,12 @@ export const maxDuration = 60
 
 const OPENAI_URL = "https://api.openai.com/v1"
 
-async function* streamLLM(
-  apiUrl: string,
-  headers: Record<string, string>,
-  payload: Record<string, unknown>
-): AsyncGenerator<string> {
-  const res = await fetch(apiUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ ...payload, stream: true }),
-    signal: AbortSignal.timeout(55000),
-  })
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "")
-    throw new Error(`LLM API error (${res.status}): ${errText.slice(0, 200)}`)
-  }
-
-  const reader = res.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ""
-  let yielded = false
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split("\n")
-    buffer = lines.pop() || ""
-
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const data = line.slice(6).trim()
-        if (data === "[DONE]") continue
-        try {
-          const parsed = JSON.parse(data)
-          const content = parsed.choices?.[0]?.delta?.content || ""
-          if (content) {
-            yielded = true
-            yield content
-          }
-        } catch {
-          // skip unparseable chunks
-        }
-      }
-    }
-  }
-
-  if (!yielded && buffer.length > 0) {
-    try {
-      const parsed = JSON.parse(buffer)
-      const content =
-        parsed.choices?.[0]?.message?.content ||
-        parsed.choices?.[0]?.delta?.content ||
-        ""
-      if (content) yield content
-    } catch {
-      yield buffer
-    }
-  }
-}
-
-function fixVisualization(
-  rawViz: { type?: string; config?: { xKey?: string; yKey?: string; title?: string; showLegend?: boolean } } | null | undefined,
-  rawSql: string | undefined,
-  columns: string[]
-): typeof rawViz {
-  if (!rawViz || !rawViz.config) return rawViz
-  if (!columns || columns.length === 0) return rawViz
-
-  const cfg = rawViz.config
-  const xOk = cfg.xKey && columns.includes(cfg.xKey)
-  const yOk = cfg.yKey && columns.includes(cfg.yKey)
-  if (xOk && yOk) return rawViz
-
-  const numericCol = columns.find((c) =>
-    c === cfg.yKey || /^(sum|total|avg|min|max|count|amount|qty|quantity|sales|revenue|sold|units)/i.test(c)
-  ) || columns[columns.length - 1]
-  const labelCol = columns.find((c) => c !== numericCol) || columns[0]
-
-  return {
-    ...rawViz,
-    config: {
-      xKey: cfg.xKey || labelCol,
-      yKey: cfg.yKey || numericCol,
-      title: cfg.title,
-      showLegend: cfg.showLegend,
-    },
-  }
-}
-
-function fixConcatSql(sql: string): string | null {
-  if (!/\bconcat\s*\(/i.test(sql)) return null
-  const groupMatch = sql.match(/\bGROUP\s+BY\b\s+([\s\S]+?)(?:\bORDER\b|\bLIMIT\b|\bHAVING\b|\bUNION\b|$)/i)
-  if (!groupMatch) return null
-  const groupCols = groupMatch[1].split(",").map((c) => c.trim().replace(/^`|`$/g, "").replace(/\s+AS\s+\S+$/i, "").trim()).filter(Boolean)
-  if (groupCols.length < 2) return null
-  // Replace SELECT concat(...) AS alias, ... with SELECT col1, col2, ...
-  const selectMatch = sql.match(/\bSELECT\b\s+([\s\S]+?)\s+\bFROM\b/i)
-  if (!selectMatch) return null
-  const selectBody = selectMatch[1]
-  // Find the concat(...) AS alias part
-  const concatMatch = selectBody.match(/\bconcat\s*\([^)]+\)\s+AS\s+(\w+)/i)
-  if (!concatMatch) return null
-  const concatAlias = concatMatch[1]
-  // Replace concat(...) AS alias with groupCols
-  const newSelect = selectBody.replace(concatMatch[0], groupCols.join(", "))
-  return sql.replace(selectBody, newSelect)
-}
-
 export async function POST(request: NextRequest) {
   const traceId = request.headers.get("x-trace-id") || crypto.randomUUID()
   const log = logger.child({ traceId })
 
   try {
-    const { messages, context } = await request.json()
+    const { messages, context } = (await request.json()) as { messages: { role: string; content: string }[]; context: ChatContext }
     const llmConfigHeader = request.headers.get("x-llm-config")
 
     log.info({ table: context?.currentTable, db: context?.database }, "agent:chat:start")
@@ -151,7 +45,7 @@ export async function POST(request: NextRequest) {
     const systemPrompt = `You are a data analysis assistant connected to a ClickHouse database.
 Current table: ${context?.currentTable || "unknown"}
 Database: ${context?.database || "default"}
-Schema: ${(context?.schema || []).map((c: { name: string; type: string }) => `${c.name}: ${c.type}`).join(", ")}
+Schema: ${(context?.schema || []).map((c) => `${c.name}: ${c.type}`).join(", ")}
 
 Rules:
 1. When asked a question, generate a ClickHouse SQL query.
@@ -219,52 +113,21 @@ NEVER use concat() in SQL. When GROUP BY has multiple columns (e.g. segment, cat
             )
           }
 
-          let parsed: Record<string, unknown> = {}
-          let parseOk = true
-          try {
-            parsed = JSON.parse(fullContent)
-            log.info({ sql: (parsed.sql as string), viz: parsed.visualization }, "agent:chat:llm-parsed")
-          } catch {
-            parseOk = false
-            log.warn({ content: fullContent.slice(0, 300) }, "agent:chat:json-parse-fail")
-            // Fallback: extract fields by regex from raw text
-            const msgMatch = fullContent.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/)
-            const sqlMatch = fullContent.match(/"sql"\s*:\s*"((?:[^"\\]|\\.)*)"/)
-            const vizMatch = fullContent.match(/"visualization"\s*:\s*(\{[\s\S]*?\})/)
-            if (msgMatch) parsed.message = msgMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1")
-            if (sqlMatch) parsed.sql = sqlMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1")
-            if (vizMatch) {
-              try { parsed.visualization = JSON.parse(vizMatch[1]) } catch { /* ignore */ }
-            }
-            if (!parsed.message) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ t: "done", message: fullContent })}\n\n`
-                )
-              )
-              controller.close()
-              return
-            }
-          }
+          const parsed = parseResponse(fullContent)
+          log.info({ sql: parsed.sql, viz: parsed.visualization }, "agent:chat:llm-parsed")
 
-          const msg = (parsed.message as string) || fullContent
-          const rawSql = parsed.sql as string | undefined
+          const msg = parsed.message
+          const rawSql = parsed.sql
           const formattedSql = rawSql
             ? (() => { try { return format(rawSql, { language: "clickhouse", tabWidth: 2, keywordCase: "upper" }) } catch { return rawSql } })()
             : null
 
-          const rawViz = parsed.visualization as
-            | { type?: string; config?: { xKey?: string; yKey?: string; title?: string; showLegend?: boolean } }
-            | undefined
-            | null
-
-          console.log("[BACKEND] LLM viz:", JSON.stringify(rawViz), "sql:", rawSql?.slice(0, 100))
+          const rawViz = parsed.visualization
 
           let rows: unknown[][] = []
           let columns: string[] = []
 
           if (rawSql) {
-            // Fix concat() in SQL — replace with individual GROUP BY columns
             const fixedSql = fixConcatSql(rawSql)
             const sqlToExecute = fixedSql || rawSql
             if (fixedSql) {
@@ -290,7 +153,7 @@ NEVER use concat() in SQL. When GROUP BY has multiple columns (e.g. segment, cat
                     sql: formattedSql || rawSql,
                     rows: [],
                     columns: [],
-                    visualization: fixVisualization(rawViz, rawSql, []),
+                    visualization: fixVisualization(rawViz, []),
                     error: "Only SELECT, SHOW, DESCRIBE, and EXPLAIN statements are allowed",
                   })}\n\n`
                 )
@@ -311,7 +174,7 @@ NEVER use concat() in SQL. When GROUP BY has multiple columns (e.g. segment, cat
                     sql: formattedSql || rawSql,
                     rows: [],
                     columns: [],
-                    visualization: fixVisualization(rawViz, rawSql, []),
+                    visualization: fixVisualization(rawViz, []),
                     error: e instanceof Error ? e.message : "SQL execution failed",
                   })}\n\n`
                 )
@@ -321,7 +184,8 @@ NEVER use concat() in SQL. When GROUP BY has multiple columns (e.g. segment, cat
             }
           }
 
-          const finalViz = fixVisualization(rawViz, rawSql, columns)
+          const effectiveViz = rawViz ?? (rawSql ? inferVisualization(rawSql, columns) : null)
+          const finalViz = fixVisualization(effectiveViz, columns)
           log.info({ cols: columns, rows: rows.length, finalViz: finalViz?.type, xKey: finalViz?.config?.xKey }, "agent:chat:done")
 
           const finalMessage = rows.length === 0

@@ -2,48 +2,14 @@
 
 import { useState, useRef, useEffect, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
-import { useLlmStore } from "./settings-panel"
 import { useLang } from "@/components/lang-provider"
 import { Chart } from "@/components/chart"
 import { useAgentChatsStore, buildChatKey } from "@/stores/agent-chats"
 import { appLog, downloadLogs, getTraceId } from "@/lib/client-logger"
-
-function stripMarkdownTables(text: string): string {
-  const lines = text.split("\n")
-  const out: string[] = []
-  let removed = 0
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    const next = lines[i + 1] || ""
-    const looksLikeTableHeader = /^\s*\|.*\|\s*$/.test(line)
-    const looksLikeSeparator = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(next)
-    if (looksLikeTableHeader && looksLikeSeparator) {
-      i += 2
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
-        i++
-        removed++
-      }
-      removed += 2
-      continue
-    }
-    out.push(line)
-    i++
-  }
-  if (removed > 0) out.push(`_（已隐藏 ${removed} 行数据表，请见下方表格 / 图表）_`)
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim()
-}
-
-interface Message {
-  role: "user" | "assistant"
-  content: string
-  sql?: string
-  rows?: unknown[][]
-  columns?: string[]
-  visualization?: { type: string; config: { xKey: string; yKey: string; title?: string } } | null
-  thinkingExpanded?: boolean
-  streamingContent?: string
-}
+import { parseSSEStream } from "@/lib/sse-parser"
+import { extractField, stripMarkdownTables } from "@/lib/llm-response"
+import { suggestQuestions } from "@/lib/suggestions"
+import type { Message } from "@/lib/agent-types"
 
 interface AgentChatProps {
   tableName?: string | null
@@ -52,42 +18,8 @@ interface AgentChatProps {
   onSqlGenerated?: (sql: string) => void
 }
 
-const NUM_KEYWORDS = ["amount", "total", "price", "quantity", "revenue", "cost", "sales", "value", "count", "volume", "budget", "profit", "sum", "balance", "fee", "rate"]
-
-function suggestQuestions(schema: { name: string; type: string; comment?: string }[], lang: string): string[] {
-  const suggestions: string[] = []
-  const nums = schema.filter((c) => /^(Int|UInt|Float|Decimal)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
-  const strs = schema.filter((c) => /^(String|FixedString|LowCardinality)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
-  const dates = schema.filter((c) => /^(Date|DateTime)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
-
-  const isZh = lang === "zh"
-
-  if (nums.length > 0 && strs.length > 0) {
-    const metric = nums.find((c) => NUM_KEYWORDS.some((k) => c.name.toLowerCase().includes(k))) || nums[0]
-    const dim = strs[0]
-    suggestions.push(isZh
-      ? `按 ${dim.name} 分组显示 ${metric.name} 前 10`
-      : `Show top 10 by ${metric.name} grouped by ${dim.name}`)
-  }
-  if (nums.length > 0) {
-    const metric = nums.find((c) => NUM_KEYWORDS.some((k) => c.name.toLowerCase().includes(k))) || nums[0]
-    suggestions.push(isZh ? `${metric.name} 的平均值是多少？` : `What is the average ${metric.name}?`)
-  }
-  if (strs.length > 0) {
-    suggestions.push(isZh ? `列出所有不同的 ${strs[0].name}` : `List distinct ${strs[0].name}`)
-  }
-  if (dates.length > 0) {
-    suggestions.push(isZh ? `按 ${dates[0].name} 显示趋势` : `Show trend over ${dates[0].name}`)
-  }
-  if (schema.length > 0) {
-    suggestions.push(isZh ? "生成此表的数据画像" : "Generate a data profile for this table")
-  }
-  return suggestions.slice(0, 5)
-}
-
 export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated }: AgentChatProps) {
   const { _t, lang } = useLang()
-  const { config } = useLlmStore()
   const chatKey = useMemo(() => buildChatKey(selectedDatabase, tableName), [selectedDatabase, tableName])
   const storedConversation = useAgentChatsStore((s) => s.conversations[chatKey])
   const setStoredConversation = useAgentChatsStore((s) => s.setConversation)
@@ -217,84 +149,47 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
       }
 
       const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let sseBuffer = ""
       let rawJson = ""
 
-      const extractMessage = (json: string): string | null => {
-        const closed = json.match(/"message"\s*:\s*"(.*?)(?<!\\)"/)
-        let msg: string | null = null
-        if (closed) {
-          msg = closed[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1")
-        } else {
-          const open = json.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)$/)
-          if (open && open[1].length > 0) {
-            msg = open[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1")
+      for await (const event of parseSSEStream(reader)) {
+        const d = event.data
+        if (event.type === "token" && d.c) {
+          rawJson += d.c as string
+          const msg = extractMessageFromPartial(rawJson)
+          setMessages((prev) => {
+            const next = [...prev]
+            const last = { ...next[next.length - 1] }
+            last.streamingContent = rawJson
+            if (msg !== null) last.content = msg
+            next[next.length - 1] = last
+            return next
+          })
+        } else if (event.type === "done") {
+          appLog("[Agent]", traceId, "done:", (d.visualization as { type?: string })?.type, "xKey:", (d.visualization as { config?: { xKey?: string } })?.config?.xKey, "cols:", (d.columns as string[])?.length, "rows:", (d.rows as unknown[][])?.length)
+          setMessages((prev) => {
+            const next = [...prev]
+            const last = { ...next[next.length - 1] }
+            last.content = (d.message as string) || "Done."
+            last.sql = (d.sql as string) || undefined
+            last.rows = (d.rows as unknown[][]) || undefined
+            last.columns = (d.columns as string[]) || undefined
+            last.visualization = (d.visualization as Message["visualization"]) ?? null
+            last.thinkingExpanded = false
+            next[next.length - 1] = last
+            return next
+          })
+          if (d.sql && onSqlGenerated) {
+            onSqlGenerated(d.sql as string)
           }
-        }
-        if (msg === null) return null
-        const sqlM = json.match(/"sql"\s*:\s*"(.*?)(?<!\\)"/)
-        if (sqlM) {
-          const sql = sqlM[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1")
-          msg += "\n\n```sql\n" + sql + "\n```"
-        }
-        return msg
-      }
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        sseBuffer += decoder.decode(value, { stream: true })
-        const lines = sseBuffer.split("\n")
-        sseBuffer = lines.pop() || ""
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue
-          try {
-            const event = JSON.parse(line.slice(6))
-
-            if (event.t === "token" && event.c) {
-              rawJson += event.c
-              const msg = extractMessage(rawJson)
-              setMessages((prev) => {
-                const next = [...prev]
-                const last = { ...next[next.length - 1] }
-                last.streamingContent = rawJson
-                if (msg !== null) last.content = msg
-                next[next.length - 1] = last
-                return next
-              })
-            } else if (event.t === "done") {
-              appLog("[Agent]", traceId, "done:", event.visualization?.type, "xKey:", event.visualization?.config?.xKey, "cols:", event.columns?.length, "rows:", event.rows?.length)
-              setMessages((prev) => {
-                const next = [...prev]
-                const last = { ...next[next.length - 1] }
-                last.content = event.message || "Done."
-                last.sql = event.sql || undefined
-                last.rows = event.rows || undefined
-                last.columns = event.columns || undefined
-                last.visualization = event.visualization ?? null
-                last.thinkingExpanded = false
-                next[next.length - 1] = last
-                return next
-              })
-              if (event.sql && onSqlGenerated) {
-                onSqlGenerated(event.sql)
-              }
-            } else if (event.t === "error") {
-              setMessages((prev) => {
-                const next = [...prev]
-                const last = { ...next[next.length - 1] }
-                last.content = event.message || "Unknown error"
-                last.thinkingExpanded = false
-                next[next.length - 1] = last
-                return next
-              })
-            }
-          } catch {
-            // skip unparseable lines
-          }
+        } else if (event.type === "error") {
+          setMessages((prev) => {
+            const next = [...prev]
+            const last = { ...next[next.length - 1] }
+            last.content = (d.message as string) || "Unknown error"
+            last.thinkingExpanded = false
+            next[next.length - 1] = last
+            return next
+          })
         }
       }
     } catch (e) {
@@ -402,13 +297,6 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
                           {msg.streamingContent !== undefined ? (
                           <div className="space-y-1">
                             {(() => {
-                              const extractField = (json: string, field: string): { text: string; complete: boolean } | null => {
-                                const closed = json.match(new RegExp(`"${field}"\\s*:\\s*"(.*?)(?<!\\\\)"`))
-                                if (closed) return { text: closed[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1"), complete: true }
-                                const open = json.match(new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)$`))
-                                if (open) return { text: open[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\(.)/g, "$1"), complete: false }
-                                return null
-                              }
                               const json = msg.streamingContent
                               const message = extractField(json, "message")
                               const sql = extractField(json, "sql")
@@ -643,4 +531,15 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
       </div>
     </div>
   )
+}
+
+function extractMessageFromPartial(json: string): string | null {
+  const result = extractField(json, "message")
+  if (!result) return null
+  let msg = result.text
+  const sqlResult = extractField(json, "sql")
+  if (sqlResult?.text) {
+    msg += "\n\n```sql\n" + sqlResult.text + "\n```"
+  }
+  return msg
 }

@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { generatePivotSQL, type PivotConfig, type PivotIndicator, type CalculatedIndicator, type FilterRule, type SortRule, type TotalsConfig } from "@/lib/pivot-sql"
 import { validate } from "@/lib/expression"
+import { executeQuery } from "@/lib/api-client"
 
 export interface PivotResult {
   columns: string[]
@@ -56,6 +57,37 @@ const initialState = {
   isExecuting: false,
   error: null as string | null,
   lastSQL: null as string | null,
+}
+
+type PivotStateSnapshot = typeof initialState
+
+function validatePivotExecution(
+  state: PivotStateSnapshot,
+  tableName: string,
+  database: string
+): string | null {
+  if (state.indicators.length === 0 && state.calculatedIndicators.length === 0) {
+    return "请至少添加一个指标"
+  }
+  if (state.rows.length === 0 && state.columns.length === 0) {
+    return "请至少添加一个行维度或列维度"
+  }
+  if (!tableName || !database) {
+    return "请先选择数据表"
+  }
+  return null
+}
+
+function buildPivotConfig(state: PivotStateSnapshot): PivotConfig {
+  return {
+    rows: state.rows,
+    columns: state.columns,
+    indicators: state.indicators,
+    calculatedIndicators: state.calculatedIndicators,
+    filters: state.filters,
+    sort: state.sort ?? undefined,
+    totals: state.totals,
+  }
 }
 
 export const usePivotStore = create<PivotState>()(
@@ -130,49 +162,19 @@ export const usePivotStore = create<PivotState>()(
 
       executePivot: async (tableName, database) => {
         const state = get()
-        if (state.indicators.length === 0 && state.calculatedIndicators.length === 0) {
-          set({ error: "请至少添加一个指标" })
-          return
-        }
-        if (state.rows.length === 0 && state.columns.length === 0) {
-          set({ error: "请至少添加一个行维度或列维度" })
-          return
-        }
-
-        if (!tableName || !database) {
-          set({ error: "请先选择数据表" })
+        const validationError = validatePivotExecution(state, tableName, database)
+        if (validationError) {
+          set({ error: validationError })
           return
         }
 
         set({ isExecuting: true, error: null })
 
-        const config: PivotConfig = {
-          rows: state.rows,
-          columns: state.columns,
-          indicators: state.indicators,
-          calculatedIndicators: state.calculatedIndicators,
-          filters: state.filters,
-          sort: state.sort ?? undefined,
-          totals: state.totals,
-        }
-
+        const config = buildPivotConfig(state)
         const sql = generatePivotSQL(config, tableName, database)
 
         try {
-          const res = await fetch("/api/query", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sql, database }),
-          })
-          const json = await res.json()
-          if (!res.ok) {
-            set({
-              error: json.message || "查询失败",
-              isExecuting: false,
-              lastSQL: sql,
-            })
-            return
-          }
+          const json = await executeQuery(sql, database)
           set({
             resultData: { columns: json.columns, rows: json.rows },
             isExecuting: false,

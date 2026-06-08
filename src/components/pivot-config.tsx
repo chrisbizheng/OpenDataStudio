@@ -5,6 +5,7 @@ import { usePivotStore } from "@/stores/pivot"
 import { usePivotHistoryStore } from "@/stores/pivot-history"
 import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
+import { shortType, isDimensionType, isIndicatorType } from "@/lib/column-utils"
 import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,26 +28,6 @@ const AGGREGATION_OPTIONS = [
   { value: "MAX", label: "MAX" },
   { value: "DISTINCT_COUNT", label: "COUNT DISTINCT" },
 ] as const
-
-function isDimensionType(type: string): boolean {
-  const base = type.replace(/^Nullable\((.+)\)$/, "$1")
-  return /^(String|FixedString|LowCardinality|Date|DateTime|Bool|Enum)/.test(base)
-}
-
-function isIndicatorType(type: string): boolean {
-  const base = type.replace(/^Nullable\((.+)\)$/, "$1")
-  return /^(Int|UInt|Float|Decimal)/.test(base)
-}
-
-function shortType(type: string): string {
-  return type
-    .replace(/^Nullable\((.+)\)$/, "$1?")
-    .replace(/^Decimal\(\d+,\s*\d+\)$/, "Decimal")
-    .replace(/^DateTime(64)?(\(.*\))?$/, "DateTime")
-    .replace(/^Array\((.+)\)$/, "[$1]")
-    .replace(/^FixedString\(\d+\)$/, "String")
-    .replace(/^LowCardinality\((.+)\)$/, "$1")
-}
 
 export function PivotConfigPanel({
   schema,

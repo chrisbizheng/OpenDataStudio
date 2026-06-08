@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
 import { formatRowCount } from "@/lib/format"
-import type { TableMeta, ColumnMeta } from "@/lib/clickhouse"
+import { fetchDatabases, fetchTables, fetchTableSchema } from "@/lib/api-client"
 
 export function Sidebar() {
   const { _t } = useLang()
@@ -58,12 +58,7 @@ export function Sidebar() {
       setSelectedTable(null)
       setSchema([])
       try {
-        const params = db ? `?database=${encodeURIComponent(db)}` : ""
-        const tablesRes = await fetch(`/api/tables${params}`)
-        if (!tablesRes.ok) throw new Error(await tablesRes.text())
-        const { tables: tableList } = (await tablesRes.json()) as {
-          tables: TableMeta[]
-        }
+        const tableList = await fetchTables(db)
         const total = tableList.reduce((s, t) => s + t.rowCount, 0)
         setTables(tableList)
         setTotalRows(total)
@@ -85,11 +80,7 @@ export function Sidebar() {
   useEffect(() => {
     async function init() {
       try {
-        const dbsRes = await fetch("/api/databases")
-        if (!dbsRes.ok) return
-        const { databases: dbList } = (await dbsRes.json()) as {
-          databases: { name: string; comment: string }[]
-        }
+        const dbList = await fetchDatabases()
         setDatabases(dbList)
         const db =
           selectedDatabase || dbList[0]?.name || ""
@@ -110,14 +101,7 @@ export function Sidebar() {
   async function handleSelectTable(name: string) {
     setSelectedTable(name)
     try {
-      const params = selectedDatabase
-        ? `?database=${encodeURIComponent(selectedDatabase)}`
-        : ""
-      const res = await fetch(
-        `/api/tables/${encodeURIComponent(name)}/schema${params}`
-      )
-      if (!res.ok) throw new Error()
-      const { columns } = (await res.json()) as { columns: ColumnMeta[] }
+      const columns = await fetchTableSchema(name, selectedDatabase ?? undefined)
       setSchema(columns)
     } catch {
       setSchema([])

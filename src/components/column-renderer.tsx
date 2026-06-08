@@ -1,3 +1,5 @@
+import { unwrapNullable, isMetricColumn } from "@/lib/column-utils"
+
 export function renderValue(value: unknown, type?: string, columnName?: string): React.ReactNode {
   if (value === null || value === undefined) {
     return <NullBadge />
@@ -35,12 +37,7 @@ export function renderValue(value: unknown, type?: string, columnName?: string):
   return <span className="text-foreground">{String(value)}</span>
 }
 
-function isMetricColumn(name?: string): boolean {
-  if (!name) return false
-  const lower = name.toLowerCase()
-  const metrics = /amount|total|price|quantity|revenue|cost|sales|value|count|volume|budget|profit|sum|balance|fee|rate/
-  return metrics.test(lower)
-}
+
 
 function NullBadge() {
   return (
@@ -129,6 +126,3 @@ function ObjectCell({ value }: { value: Record<string, unknown> }) {
   )
 }
 
-function unwrapNullable(type: string): string {
-  return type.replace(/^Nullable\((.+)\)$/, "$1")
-}

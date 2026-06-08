@@ -72,7 +72,7 @@ export function Chart({ data, config, onClick }: ChartProps) {
       treemap: "treemap", tree: "treemap",
       composed: "composed", combo: "composed", mixed: "composed",
     }
-    let resolvedType = typeMap[(config.type || "bar").toLowerCase().replace(/[_\s-]/g, "")] || "bar"
+    const resolvedType = typeMap[(config.type || "bar").toLowerCase().replace(/[_\s-]/g, "")] || "bar"
     let resolvedXKey = config.xKey
     let resolvedData = rawData
     let barGroups: string[] | undefined
@@ -132,8 +132,6 @@ export function Chart({ data, config, onClick }: ChartProps) {
   const resolvedType = resolved.resolvedType
   const barGroups = resolved.barGroups
 
-  if (!data || data.length === 0) return null
-
   const avg = useMemo(() => {
     const vals = chartData.map((d) => Number(d[config.yKey])).filter((v) => !isNaN(v))
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
@@ -149,18 +147,26 @@ export function Chart({ data, config, onClick }: ChartProps) {
     return item
   }, [chartData, config.yKey])
 
+  if (!data || data.length === 0) return null
+
   const handleChartClick = (d: unknown) => {
     if (!onClick) return
     const data = d as Record<string, unknown>
     let payload: Record<string, unknown> | undefined
+    let barDataKey: string | undefined
+
     if (data?.payload) {
       payload = data.payload as Record<string, unknown>
-    } else if ((data as { activePayload?: { payload: Record<string, unknown> }[] })?.activePayload?.length) {
-      payload = (data as { activePayload: { payload: Record<string, unknown> }[] }).activePayload[0].payload
+      barDataKey = data.dataKey as string | undefined
+    } else if ((data as { activePayload?: { payload: Record<string, unknown>; dataKey?: string }[] })?.activePayload?.length) {
+      const first = (data as { activePayload: { payload: Record<string, unknown>; dataKey?: string }[] }).activePayload[0]
+      payload = first.payload
+      barDataKey = first.dataKey
     }
     if (!payload) return
     const key = String(payload[resolvedXKey] ?? "")
-    const value = Number(payload[config.yKey]) || 0
+    const yValue = barDataKey ? payload[barDataKey] : payload[config.yKey]
+    const value = Number(yValue) || 0
     onClick({ key, value, row: payload })
   }
 
