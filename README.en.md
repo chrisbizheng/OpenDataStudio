@@ -2,7 +2,7 @@
 
 A modern ClickHouse data exploration and visualization workbench built with Next.js.
 
-**[English](README.zh-CN.md)** | **[中文](README.md)**
+**[English](README.en.md)** | **[中文](README.md)**
 
 ![Next.js](https://img.shields.io/badge/Next.js-16.2-black)
 ![React](https://img.shields.io/badge/React-19.2-blue)

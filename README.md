@@ -2,7 +2,7 @@
 
 基于 Next.js 构建的现代化 ClickHouse 数据探索与可视化工作台。
 
-**[English](README.zh-CN.md)** | **[中文](README.md)**
+**[English](README.en.md)** | **[中文](README.md)**
 
 ![Next.js](https://img.shields.io/badge/Next.js-16.2-black)
 ![React](https://img.shields.io/badge/React-19.2-blue)
