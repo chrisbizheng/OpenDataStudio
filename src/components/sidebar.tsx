@@ -1,15 +1,18 @@
 "use client"
 
-import { useEffect, useCallback, useState } from "react"
+import { useEffect, useCallback, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react"
 import { useShallow } from "zustand/react/shallow"
+import { useDraggable } from "@dnd-kit/core"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useDatasetStore } from "@/stores/dataset"
+import { useFieldRoleStore } from "@/stores/field-role"
 import { useLang } from "@/components/lang-provider"
 import { formatRowCount } from "@/lib/format"
 import { fetchDatabases, fetchTables, fetchTableSchema } from "@/lib/api-client"
+import { createFieldRoleKey, getFieldRole, getNextFieldRole, type FieldRole } from "@/lib/field-role"
 
 export function Sidebar() {
   const { _t } = useLang()
@@ -109,6 +112,14 @@ export function Sidebar() {
   }
 
   const tableMeta = tables.find((t) => t.name === selectedTable)
+  const roleOverrides = useFieldRoleStore((s) => s.overrides)
+  const setRoleOverride = useFieldRoleStore((s) => s.setOverride)
+  const clearRoleOverride = useFieldRoleStore((s) => s.clearOverride)
+  const [roleMenu, setRoleMenu] = useState<{
+    column: string
+    x: number
+    y: number
+  } | null>(null)
 
   const [schemaHeight, setSchemaHeight] = useState(384)
 
@@ -231,41 +242,187 @@ export function Sidebar() {
             )}
             <ScrollArea className="flex-1 min-h-0">
               <div className="px-1 py-0.5 space-y-0.5">
-                {schema.map((col) => (
-                  <Tooltip key={col.name}>
-                    <TooltipTrigger className="block w-full" render={<span />}>
-                      <div className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded hover:bg-muted/50 pointer-events-auto">
-                        <span className="font-medium truncate">{col.name}</span>
-                        {col.comment && (
-                          <span className="text-[10px] text-muted-foreground/60 italic truncate min-w-0">
-                            {col.comment}
+                {schema.map((col) => {
+                  const key = selectedDatabase && selectedTable
+                    ? createFieldRoleKey(selectedDatabase, selectedTable, col.name)
+                    : ""
+                  const resolvedRole = getFieldRole(col.type, key ? roleOverrides[key] : undefined)
+                  return (
+                    <Tooltip key={col.name}>
+                      <TooltipTrigger className="block w-full" render={<span />}>
+                        <SchemaFieldDraggable
+                          id={`schema:${key}`}
+                          field={col.name}
+                          role={resolvedRole?.role ?? null}
+                          disabled={!resolvedRole}
+                          label={`${_t("field.role.drag")} ${col.name}`}
+                        >
+                          <span className="font-medium truncate">{col.name}</span>
+                          {col.comment && (
+                            <span className="text-[10px] text-muted-foreground/60 italic truncate min-w-0">
+                              {col.comment}
+                            </span>
+                          )}
+                          <span className="text-muted-foreground font-mono text-[10px] ml-auto shrink-0">
+                            {col.type.replace(/^Nullable\((.+)\)$/, "$1")}
                           </span>
-                        )}
-                        <span className="text-muted-foreground font-mono text-[10px] ml-auto shrink-0">
+                          {col.type.startsWith("Nullable(") && (
+                            <span className="text-[10px] text-destructive/70 shrink-0">nullable</span>
+                          )}
+                          <FieldRoleBadge
+                            role={resolvedRole?.role ?? null}
+                            defaultRole={resolvedRole?.defaultRole ?? null}
+                            isOverridden={resolvedRole?.isOverridden ?? false}
+                            onToggle={(e) => {
+                              e.stopPropagation()
+                              if (!selectedDatabase || !selectedTable || !resolvedRole) return
+                              setRoleOverride(
+                                selectedDatabase,
+                                selectedTable,
+                                col.name,
+                                getNextFieldRole(resolvedRole.role)
+                              )
+                            }}
+                            onOpenMenu={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (!resolvedRole) return
+                              setRoleMenu({ column: col.name, x: e.clientX, y: e.clientY })
+                            }}
+                            label={_t}
+                          />
+                        </SchemaFieldDraggable>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        {col.name}
+                        {col.comment && <> · {col.comment}</>}
+                        <span className="text-muted-foreground font-mono ml-1">
                           {col.type.replace(/^Nullable\((.+)\)$/, "$1")}
                         </span>
                         {col.type.startsWith("Nullable(") && (
-                          <span className="text-[10px] text-destructive/70 shrink-0">nullable</span>
+                          <span className="text-destructive/70 ml-0.5">nullable</span>
                         )}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      {col.name}
-                      {col.comment && <> · {col.comment}</>}
-                      <span className="text-muted-foreground font-mono ml-1">
-                        {col.type.replace(/^Nullable\((.+)\)$/, "$1")}
-                      </span>
-                      {col.type.startsWith("Nullable(") && (
-                        <span className="text-destructive/70 ml-0.5">nullable</span>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
+                        {resolvedRole && (
+                          <span className="ml-1">
+                            · {_t("field.role.current")}：{_t(`field.role.${resolvedRole.role}`)}
+                            （{_t("field.role.default")}：{_t(`field.role.${resolvedRole.defaultRole}`)}）
+                          </span>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                })}
               </div>
             </ScrollArea>
+            {roleMenu && selectedDatabase && selectedTable && (
+              <div
+                className="fixed z-50 min-w-28 rounded-md border border-border bg-popover p-1 text-xs shadow-md"
+                style={{ left: roleMenu.x, top: roleMenu.y }}
+                onMouseLeave={() => setRoleMenu(null)}
+              >
+                {(["dimension", "indicator"] as FieldRole[]).map((role) => (
+                  <button
+                    key={role}
+                    className="block w-full rounded px-2 py-1 text-left hover:bg-muted"
+                    onClick={() => {
+                      setRoleOverride(selectedDatabase, selectedTable, roleMenu.column, role)
+                      setRoleMenu(null)
+                    }}
+                  >
+                    {_t(`field.role.menu.set_${role}`)}
+                  </button>
+                ))}
+                <button
+                  className="block w-full rounded px-2 py-1 text-left text-muted-foreground hover:bg-muted"
+                  onClick={() => {
+                    clearRoleOverride(selectedDatabase, selectedTable, roleMenu.column)
+                    setRoleMenu(null)
+                  }}
+                >
+                  {_t("field.role.menu.reset")}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function SchemaFieldDraggable({
+  id,
+  field,
+  role,
+  disabled,
+  label,
+  children,
+}: {
+  id: string
+  field: string
+  role: FieldRole | null
+  disabled: boolean
+  label: string
+  children: ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    disabled,
+    data: { source: "schema", field, role },
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded hover:bg-muted/50 pointer-events-auto"
+      {...attributes}
+      {...listeners}
+      role="button"
+      aria-label={label}
+      aria-grabbed={isDragging}
+    >
+      {children}
+    </div>
+  )
+}
+
+function FieldRoleBadge({
+  role,
+  defaultRole,
+  isOverridden,
+  onToggle,
+  onOpenMenu,
+  label,
+}: {
+  role: FieldRole | null
+  defaultRole: FieldRole | null
+  isOverridden: boolean
+  onToggle: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onOpenMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  label: (key: string) => string
+}) {
+  const text = role === "dimension" ? "D" : role === "indicator" ? "I" : "—"
+  const roleLabel = role ? label(`field.role.${role}`) : label("field.role.unmarkable")
+  const defaultLabel = defaultRole ? label(`field.role.${defaultRole}`) : label("field.role.unmarkable")
+  const className = role
+    ? isOverridden
+      ? role === "dimension"
+        ? "border-blue-500/50 bg-blue-500/10 text-blue-600"
+        : "border-orange-500/50 bg-orange-500/10 text-orange-600"
+      : "border-transparent bg-muted text-muted-foreground"
+    : "border-transparent text-muted-foreground/40"
+
+  return (
+    <button
+      type="button"
+      disabled={!role}
+      aria-label={`${label("field.role.current")}：${roleLabel}`}
+      title={`${label("field.role.current")}：${roleLabel} · ${label("field.role.default")}：${defaultLabel}${isOverridden ? ` · ${label("field.role.overridden")}` : ""}`}
+      onClick={onToggle}
+      onContextMenu={onOpenMenu}
+      className={`h-4 min-w-4 rounded border px-1 text-[9px] leading-3 shrink-0 ${className}`}
+    >
+      {text}
+    </button>
   )
 }

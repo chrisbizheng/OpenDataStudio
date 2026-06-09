@@ -1,6 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useState, useMemo } from "react"
+import { useCallback, useDeferredValue, useEffect, useState, useMemo } from "react"
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
 import { useShallow } from "zustand/react/shallow"
 import { useTheme } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
@@ -19,14 +29,18 @@ import { PivotGrid } from "@/components/pivot-grid"
 import { useLang } from "@/components/lang-provider"
 import { useUiStore } from "@/stores/ui"
 import { useDatasetStore } from "@/stores/dataset"
-import { useQueryStore, getFilteredRows } from "@/stores/query"
+import { createGridFilter } from "@/lib/grid-filter"
+import { useQueryStore } from "@/stores/query"
 import { useSqlHistoryStore } from "@/stores/sql-history"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
 import { usePivotStore } from "@/stores/pivot"
+import { resolveDrop, type PivotDragItem, type PivotDropZone } from "@/lib/pivot-dnd"
+import { getFieldRole } from "@/lib/field-role"
 import { generatePivotSQL } from "@/lib/pivot-sql"
 import type { PivotConfig } from "@/lib/pivot-sql"
 import { executeQuery as apiQuery } from "@/lib/api-client"
 import { exportData } from "@/lib/export"
+import { inferStableOrder } from "@/lib/stable-result-order"
 import { buildSelectSql, buildDrilldownSql, buildSortDirection } from "@/lib/query-builder"
 import { ResizeHandle } from "@/components/resize-handle"
 
@@ -68,6 +82,7 @@ export default function Home() {
     setSort,
     setSearchQuery,
     loadMore,
+    setCurrentSchema,
   } = useQueryStore(useShallow((s) => ({
     data: s.data,
     isExecuting: s.isExecuting,
@@ -79,12 +94,23 @@ export default function Home() {
     setSort: s.setSort,
     setSearchQuery: s.setSearchQuery,
     loadMore: s.loadMore,
+    setCurrentSchema: s.setCurrentSchema,
   })))
   const addEntry = useSqlHistoryStore((s) => s.addEntry)
+  const buildDefaultTableSql = useCallback(() => {
+    if (!selectedDatabase || !selectedTable) return ""
+    const stableOrder = inferStableOrder(schema)
+    return buildSelectSql(selectedDatabase, selectedTable, stableOrder ? { orderBy: stableOrder.field, direction: stableOrder.direction } : undefined)
+  }, [schema, selectedDatabase, selectedTable])
   const { resolved } = useTheme()
   const [sqlText, setSqlText] = useState("")
   const [showSqlPreview, setShowSqlPreview] = useState(false)
   const [previewSql, setPreviewSql] = useState("")
+  const [activeDragItem, setActiveDragItem] = useState<PivotDragItem | null>(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor)
+  )
   const [drilldownData, setDrilldownData] = useState<{
     columns: string[]
     rows: unknown[][]
@@ -103,6 +129,10 @@ export default function Home() {
     error: s.error,
   })))
   const resetPivot = usePivotStore((s) => s.reset)
+  const addPivotRow = usePivotStore((s) => s.addRow)
+  const addPivotColumn = usePivotStore((s) => s.addColumn)
+  const addPivotIndicator = usePivotStore((s) => s.addIndicator)
+  const addPivotFilter = usePivotStore((s) => s.addFilter)
 
   const pivotConfigKey = JSON.stringify({
     r: pivotStore.rows,
@@ -126,12 +156,16 @@ export default function Home() {
   }), [pivotConfigKey])
 
   useEffect(() => {
+    setCurrentSchema(schema)
+  }, [schema, setCurrentSchema])
+
+  useEffect(() => {
     if (selectedTable && selectedDatabase) {
-      executeQuery(buildSelectSql(selectedDatabase, selectedTable), `${selectedDatabase}.${selectedTable}`)
+      executeQuery(buildDefaultTableSql(), `${selectedDatabase}.${selectedTable}`)
     }
     resetPivot()
     queueMicrotask(() => setDrilldownData(null))
-  }, [selectedTable, selectedDatabase, executeQuery, resetPivot])
+  }, [selectedTable, selectedDatabase, executeQuery, resetPivot, buildDefaultTableSql])
 
   const handleSort = useCallback(
     (column: string) => {
@@ -145,18 +179,20 @@ export default function Home() {
         )
       } else {
         executeQuery(
-          buildSelectSql(selectedDatabase, selectedTable),
+          buildDefaultTableSql(),
           `${selectedDatabase}.${selectedTable}`
         )
       }
     },
-    [selectedTable, selectedDatabase, sort, executeQuery, setSort]
+    [selectedTable, selectedDatabase, sort, executeQuery, setSort, buildDefaultTableSql]
   )
 
+  const deferredSearch = useDeferredValue(searchQuery)
+  const gridFilter = useMemo(() => createGridFilter(), [])
   const filteredRows = useMemo(
     () =>
-      data ? getFilteredRows(data.rows, searchQuery) : [],
-    [data, searchQuery]
+      data ? gridFilter(data.rows, deferredSearch) : [],
+    [data, deferredSearch, gridFilter]
   )
 
   const handleSqlExecute = useCallback(
@@ -233,6 +269,51 @@ export default function Home() {
     setShowSqlPreview(true)
   }, [selectedTable, selectedDatabase])
 
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as PivotDragItem | undefined
+    if (data) setActiveDragItem(data)
+  }, [])
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const item = event.active.data.current as PivotDragItem | undefined
+      const overId = String(event.over?.id ?? "")
+      const zone = overId.startsWith("zone:")
+        ? (overId.slice(5) as PivotDropZone)
+        : null
+      const action = item ? resolveDrop(item, zone) : null
+      setActiveDragItem(null)
+      if (!action) return
+      if (action.type === "add-row") addPivotRow(action.field)
+      if (action.type === "add-column") addPivotColumn(action.field)
+      if (action.type === "add-indicator") {
+        const meta = schema.find((s) => s.name === action.field)
+        const agg = /count/i.test(action.field) ? "COUNT" : "SUM"
+        addPivotIndicator({
+          key: `${action.field}_${agg.toLowerCase()}`,
+          field: action.field,
+          title: meta?.comment || action.field,
+          aggregation: agg,
+        })
+      }
+      if (action.type === "add-filter") {
+        const meta = schema.find((s) => s.name === action.field)
+        if (!meta) return
+        const role = getFieldRole(meta.type, item?.role ?? undefined)
+        if (!role) return
+        const isRange = role.role === "indicator" || /^Date/.test(meta.type.replace(/^Nullable\((.+)\)$/, "$1"))
+        addPivotFilter({
+          field: action.field,
+          op: isRange ? "BETWEEN" : "IN",
+          value: isRange ? ["", ""] : [],
+        })
+      }
+    },
+    [addPivotColumn, addPivotFilter, addPivotIndicator, addPivotRow, schema]
+  )
+
+  const handleDragCancel = useCallback(() => setActiveDragItem(null), [])
+
   const handleDrilldown = useCallback(
     async (params: { dimensionValues: Record<string, unknown>; indicatorKey: string }) => {
       if (!selectedTable || !selectedDatabase) return
@@ -250,7 +331,13 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
-      <div className="h-full flex flex-col bg-background">
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="h-full flex flex-col bg-background">
         <header className="flex items-center justify-between px-3 h-10 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <button
@@ -474,6 +561,14 @@ export default function Home() {
       </div>
 
       {/* SQL Preview Dialog */}
+        <DragOverlay>
+          {activeDragItem && (
+            <div className="rounded border border-border bg-background px-2 py-1 text-xs shadow">
+              {activeDragItem.field}
+            </div>
+          )}
+        </DragOverlay>
+
       {showSqlPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-background border border-border rounded-lg shadow-lg w-[600px] max-h-[80vh] flex flex-col">
@@ -510,6 +605,7 @@ export default function Home() {
           </div>
         </div>
       )}
+      </DndContext>
     </ErrorBoundary>
   )
 }

@@ -27,7 +27,7 @@ export interface CalculatedIndicator {
 
 export interface FilterRule {
   field: string
-  op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE" | "IN"
+  op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE" | "IN" | "BETWEEN"
   value: unknown
 }
 
@@ -41,6 +41,8 @@ export interface TotalsConfig {
   column?: { showGrandTotals: boolean; showSubTotals: boolean }
 }
 
+export const LARGE_PIVOT_WARNING_THRESHOLD = 5000
+
 export interface PivotConfig {
   rows: string[]
   columns: string[]
@@ -49,6 +51,7 @@ export interface PivotConfig {
   filters?: FilterRule[]
   sort?: SortRule
   totals?: TotalsConfig
+  limit?: number
 }
 
 function escapeField(name: string): string {
@@ -121,6 +124,10 @@ function buildWhereClause(filters?: FilterRule[]): string {
     if (f.op === "LIKE") {
       return `${field} LIKE '${String(f.value).replace(/'/g, "''")}'`
     }
+    if (f.op === "BETWEEN") {
+      const [from, to] = Array.isArray(f.value) ? f.value : [f.value, f.value]
+      return `${field} BETWEEN '${String(from).replace(/'/g, "''")}' AND '${String(to).replace(/'/g, "''")}'`
+    }
     return `${field} ${f.op} '${String(f.value).replace(/'/g, "''")}'`
   })
   return `WHERE ${clauses.join(" AND ")}`
@@ -162,6 +169,7 @@ export function generatePivotSQL(
     : allDimensions.length > 0
       ? `ORDER BY ${allDimensions.map(escapeField).join(", ")}`
       : ""
+  const limit = config.limit ? `LIMIT ${config.limit}` : ""
 
-  return [`SELECT\n  ${select}`, from, where, groupBy, orderBy].filter(Boolean).join("\n")
+  return [`SELECT\n  ${select}`, from, where, groupBy, orderBy, limit].filter(Boolean).join("\n")
 }

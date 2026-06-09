@@ -1,13 +1,14 @@
 "use client"
 
-import { useEffect, useRef, useCallback, useState, useMemo } from "react"
+import { useEffect, useRef, useState, useMemo, useDeferredValue } from "react"
 import * as VTable from "@visactor/vtable"
 import { useTheme } from "@/components/theme-provider"
 import { getVTableTheme } from "@/lib/vtable-theme"
-import type { PivotConfig } from "@/lib/pivot-sql"
+import { LARGE_PIVOT_WARNING_THRESHOLD, type PivotConfig } from "@/lib/pivot-sql"
 import type { ColumnMeta } from "@/lib/clickhouse"
 import { useLang } from "@/components/lang-provider"
 import { SearchBar } from "@/components/search-bar"
+import { buildPivotRecords, filterAndSortPivotData } from "@/lib/pivot-client-data"
 
 interface PivotGridProps {
   config: PivotConfig
@@ -24,68 +25,39 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
   const { resolved: theme } = useTheme()
   const { _t } = useLang()
   const [searchQuery, setSearchQuery] = useState("")
+  const deferredSearchQuery = useDeferredValue(searchQuery)
   const [sortColumn, setSortColumn] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>(null)
 
-  const filteredAndSortedData = useMemo(() => {
-    if (data.rows.length === 0) return data
+  const filteredAndSortedData = useMemo(
+    () => filterAndSortPivotData(data, deferredSearchQuery, sortColumn, sortDir),
+    [data, deferredSearchQuery, sortColumn, sortDir]
+  )
 
-    let rows = data.rows
-    const cols = data.columns
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      rows = rows.filter((row) =>
-        row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
-      )
-    }
-
-    if (sortColumn && sortDir) {
-      const colIdx = cols.indexOf(sortColumn)
-      if (colIdx >= 0) {
-        const sorted = [...rows].sort((a, b) => {
-          const va = a[colIdx]
-          const vb = b[colIdx]
-          if (va == null && vb == null) return 0
-          if (va == null) return 1
-          if (vb == null) return -1
-          const na = typeof va === "number" ? va : Number(va)
-          const nb = typeof vb === "number" ? vb : Number(vb)
-          if (!isNaN(na) && !isNaN(nb)) {
-            return sortDir === "asc" ? na - nb : nb - na
-          }
-          const sa = String(va)
-          const sb = String(vb)
-          return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa)
-        })
-        rows = sorted
-      }
-    }
-
-    return { columns: cols, rows }
-  }, [data, searchQuery, sortColumn, sortDir])
-
-  const buildRecords = useCallback(() => {
-    return filteredAndSortedData.rows.map((row) => {
-      const record: Record<string, unknown> = {}
-      filteredAndSortedData.columns.forEach((col, i) => {
-        record[col] = row[i]
-      })
-      return record
+  const schemaTitleByField = useMemo(() => {
+    const map = new Map<string, string>()
+    schema.forEach((field) => {
+      map.set(field.name, field.comment || field.name)
     })
-  }, [filteredAndSortedData])
+    return map
+  }, [schema])
 
-  const buildOption = useCallback(() => {
+  const records = useMemo(
+    () => buildPivotRecords(filteredAndSortedData),
+    [filteredAndSortedData]
+  )
+
+  const option = useMemo(() => {
     const rows = config.rows.map((field) => ({
       dimensionKey: field,
-      title: schema.find((s) => s.name === field)?.comment || field,
+      title: schemaTitleByField.get(field) || field,
       width: 150,
       minWidth: 100,
     }))
 
     const columns = config.columns.map((field) => ({
       dimensionKey: field,
-      title: schema.find((s) => s.name === field)?.comment || field,
+      title: schemaTitleByField.get(field) || field,
       width: 120,
       minWidth: 80,
     }))
@@ -129,8 +101,6 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
       })),
     ]
 
-    const records = buildRecords()
-
     const option: VTable.PivotTableConstructorOptions = {
       rows,
       columns,
@@ -172,7 +142,7 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
     }
 
     return option
-  }, [config, filteredAndSortedData, schema, buildRecords, theme])
+  }, [config, records, schemaTitleByField, theme])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -184,7 +154,6 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
 
     if (filteredAndSortedData.rows.length === 0) return
 
-    const option = buildOption()
     const tableInstance = new VTable.PivotTable(containerRef.current, option)
     tableRef.current = tableInstance
 
@@ -231,7 +200,7 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
         tableRef.current = null
       }
     }
-  }, [buildOption, onCellClick, filteredAndSortedData.rows.length])
+  }, [option, onCellClick, filteredAndSortedData.rows.length, sortColumn, sortDir])
 
   // ResizeObserver: handle container size changes (e.g. sidebar toggle)
   useEffect(() => {
@@ -272,9 +241,15 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
       <div className="flex items-center gap-2 shrink-0">
         <SearchBar value={searchQuery} onChange={setSearchQuery} />
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-          {filteredAndSortedData.rows.length} {_t("pivot.rows")}
+          {filteredAndSortedData.rows.length} {_t("pivot.result_rows")}
           {filteredAndSortedData.rows.length < data.rows.length
             ? ` / ${data.rows.length}`
+            : ""}
+          {config.limit && data.rows.length >= config.limit
+            ? ` · ${_t("pivot.limited_prefix")} ${config.limit} ${_t("pivot.result_rows")}`
+            : ""}
+          {!config.limit && data.rows.length >= LARGE_PIVOT_WARNING_THRESHOLD
+            ? ` · ${_t("pivot.large_warning")}`
             : ""}
         </span>
         {sortColumn && (

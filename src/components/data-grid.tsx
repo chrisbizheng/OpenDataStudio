@@ -6,6 +6,8 @@ import { renderValue } from "./column-renderer"
 import { useLang } from "@/components/lang-provider"
 import { shortType } from "@/lib/column-utils"
 import { SearchBar } from "@/components/search-bar"
+import { shouldLoadNextResultWindow } from "@/lib/incremental-loading"
+import { buildGridColumns } from "@/lib/grid-columns"
 import type { ColumnMeta } from "@/lib/clickhouse"
 
 interface DataGridProps {
@@ -46,18 +48,20 @@ export function DataGrid({
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const [hoveredCol, setHoveredCol] = useState<string | null>(null)
 
+  const gridColumns = useMemo(() => buildGridColumns(columns, schema), [columns, schema])
+
   const colWidths = useMemo(() => {
     const widths: number[] = [28]
     const sample = rows.slice(0, 100)
     for (let i = 0; i < columns.length; i++) {
-      const colMeta = schema.find((s) => s.name === columns[i])
+      const colMeta = gridColumns[i]
       let maxDataLen = 0
       for (const row of sample) {
         const str = row[i] != null ? String(row[i]) : ""
         maxDataLen = Math.max(maxDataLen, str.length)
       }
       const nameW = textWidth(columns[i])
-      const typeW = colMeta ? textWidth(shortType(colMeta.type)) : 0
+      const typeW = colMeta.type ? textWidth(shortType(colMeta.type)) : 0
       const commentW = colMeta?.comment ? textWidth(colMeta.comment) : 0
       const headerW = Math.max(nameW, typeW, commentW)
       const dataW = maxDataLen * 7.5 + 16
@@ -65,7 +69,7 @@ export function DataGrid({
       widths.push(Math.ceil(width))
     }
     return widths
-  }, [columns, rows, schema])
+  }, [columns, rows, gridColumns])
 
   const colStyle = useCallback(
     (idx: number): React.CSSProperties => {
@@ -75,6 +79,14 @@ export function DataGrid({
     },
     [colWidths]
   )
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    if (!onLoadMore || isLoading) return
+    const el = event.currentTarget
+    if (shouldLoadNextResultWindow({ scrollTop: el.scrollTop, clientHeight: el.clientHeight, scrollHeight: el.scrollHeight })) {
+      onLoadMore()
+    }
+  }, [isLoading, onLoadMore])
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -86,7 +98,12 @@ export function DataGrid({
   if (rows.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <SearchBar value={searchQuery} onChange={onSearchChange} />
+        <div className="flex items-center gap-2 shrink-0">
+          <SearchBar value={searchQuery} onChange={onSearchChange} />
+          {onSearchChange && (
+            <span className="text-[10px] text-muted-foreground shrink-0" title={_t("grid.window_search")}>{_t("grid.window_search")}</span>
+          )}
+        </div>
           <div className="flex items-center justify-center flex-1 text-sm text-muted-foreground">
             {_t("grid.no_rows")}
           </div>
@@ -98,6 +115,9 @@ export function DataGrid({
     <div className="flex flex-col h-full gap-2">
       <div className="flex items-center gap-2 shrink-0">
         <SearchBar value={searchQuery} onChange={onSearchChange} />
+        {onSearchChange && (
+          <span className="text-[10px] text-muted-foreground shrink-0" title={_t("grid.window_search")}>{_t("grid.window_search")}</span>
+        )}
         {loadedRows !== undefined && (
           <span className="text-xs text-muted-foreground tabular-nums shrink-0">
             {rows.length} {_t("grid.rows")}
@@ -120,24 +140,25 @@ export function DataGrid({
       <div
         className="overflow-auto border border-border rounded-md flex-1"
         ref={tableContainerRef}
+        onScroll={handleScroll}
       >
         <div style={{ minWidth: colWidths.reduce((a, b) => a + b, 0), minHeight: "100%" }}>
           <table className="border-collapse text-xs" style={{ width: colWidths.reduce((a, b) => a + b, 0), tableLayout: "fixed" }}>
             <thead className="sticky top-0 z-10">
               <tr style={{ height: 52 }}>
                 <th
-                  className="bg-muted/50 px-2 text-left font-medium text-muted-foreground border-r border-border sticky left-0 z-20 text-center text-[10px]"
+                  className="bg-muted px-2 text-left font-medium text-muted-foreground border-r border-border sticky left-0 z-20 text-center text-[10px]"
                   style={colStyle(0)}
                 >
                   #
                 </th>
                 {columns.map((col, i) => {
-                  const colMeta = schema.find((s) => s.name === col)
+                  const colMeta = gridColumns[i]
                   const isSorted = sortColumn === col
                   return (
                     <th
                       key={col}
-                      className={`bg-muted/50 px-2 text-left font-medium cursor-pointer select-none transition-colors align-top ${
+                      className={`bg-muted px-2 text-left font-medium cursor-pointer select-none transition-colors align-top ${
                         isSorted || hoveredCol === col
                           ? "text-foreground"
                           : "text-muted-foreground"
@@ -161,7 +182,7 @@ export function DataGrid({
                             </span>
                           )}
                         </div>
-                        {colMeta && (
+                        {colMeta.type && (
                           <span className="text-[10px] text-muted-foreground/90 font-mono truncate">
                             {shortType(colMeta.type)}
                           </span>
@@ -208,9 +229,7 @@ export function DataGrid({
                       {virtualRow.index + 1}
                     </td>
                     {row.map((cell, colIdx) => {
-                      const colMeta = schema.find(
-                        (s) => s.name === columns[colIdx]
-                      )
+                      const colMeta = gridColumns[colIdx]
                       return (
                         <td
                           key={colIdx}

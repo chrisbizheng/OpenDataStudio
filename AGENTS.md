@@ -142,7 +142,7 @@ Dockerfile uses `output: "standalone"` — the production image runs `node serve
 ## Project-Specific Notes
 
 - **Monaco Editor** (`@monaco-editor/react`) for the SQL console, **CodeMirror** (`@uiw/react-codemirror`) for a secondary editor.
-- **Recharts** for chart visualization (bar, line, area, pie, scatter, radar, radialBar, treemap, composed — 9 types). Charts support `onClick` for drill-down (detail card + AI follow-up), `CustomTooltip` with colored dots, `Legend`, `ReferenceLine` (average), `ReferenceDot` (max), and entrance animation.
+- **ECharts** (`echarts` + `echarts-for-react`) for chart visualization (bar, line, area, pie, scatter, radar, radialBar, treemap, composed — 9 types). Charts support click drill-down (detail card + AI follow-up), brush selection, toolbox actions, dataZoom, custom tooltip, and dark/light theme options.
 - **`src/components/column-renderer.tsx`**: type-aware cell renderers for ClickHouse types (numbers, dates, arrays, nulls, booleans). Uses metric column detection by name pattern.
 - **Demo data**: 23 ClickHouse tables, ~96M rows total. Key tables: `real_anonymized_sales` (29.4M), `dunnhumby_causal` (36.8M), `criteo_attribution` (16.5M).
 - **Issue tracker**: local markdown files in `issues/` directory (01 through 08).

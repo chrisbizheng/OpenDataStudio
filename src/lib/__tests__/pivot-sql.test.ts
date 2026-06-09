@@ -3,8 +3,6 @@ import {
   generatePivotSQL,
   getIndicatorSQLMap,
   type PivotConfig,
-  type PivotIndicator,
-  type CalculatedIndicator,
 } from "../pivot-sql"
 
 describe("getIndicatorSQLMap", () => {
@@ -158,6 +156,33 @@ describe("generatePivotSQL", () => {
     expect(sql).toContain("ORDER BY `s` DESC")
   })
 
+  it("默认不限制聚合结果行数，确保 pivot 数据完整", () => {
+    const config: PivotConfig = {
+      rows: ["user_id"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).not.toContain("LIMIT")
+  })
+
+  it("允许显式限制 pivot 聚合结果行数", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+      limit: 1000,
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("LIMIT 1000")
+  })
+
   it("无指标时生成空 SQL", () => {
     const config: PivotConfig = {
       rows: ["region"],
@@ -182,6 +207,20 @@ describe("generatePivotSQL", () => {
     }
     const sql = generatePivotSQL(config, "t", "db")
     expect(sql).toContain("IN ('华东', '华南')")
+  })
+
+  it("BETWEEN 过滤条件正确生成", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "s", field: "sales", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [],
+      filters: [{ field: "sales", op: "BETWEEN", value: [10, 20] }],
+    }
+    const sql = generatePivotSQL(config, "t", "db")
+    expect(sql).toContain("BETWEEN '10' AND '20'")
   })
 
   it("LIKE 过滤条件正确生成", () => {

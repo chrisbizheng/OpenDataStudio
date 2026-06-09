@@ -6,6 +6,13 @@
 - **列 (Column)**：表中的字段，有类型信息（String、Int、DateTime 等）
 - **Schema**：表的列定义集合，包含列名、类型、注释
 - **查询 (Query)**：发送给 ClickHouse 的 SQL 语句，仅支持只读操作
+- **结果窗口 (Result Window)**：Data Grid 当前已加载并可浏览的查询结果子集，不等同于全量查询结果
+- **窗口导出 (Window Export)**：导出当前结果窗口中的已加载数据
+- **全量导出 (Full Export)**：导出查询对应的完整结果集，不依赖 Data Grid 当前已加载的数据
+- **增量加载 (Incremental Loading)**：Data Grid 在用户接近结果窗口底部时继续加载后续结果页的浏览方式
+- **稳定结果顺序 (Stable Result Order)**：查询结果在分页加载时使用确定性排序，使不同结果页之间的顺序可预期
+- **窗口搜索 (Window Search)**：仅在结果窗口的已加载数据中执行的 Data Grid 搜索
+- **窗口排序 (Window Sort)**：仅对结果窗口中的已加载数据进行排序，不代表全量查询结果顺序
 
 ## Pivot 术语
 
@@ -23,6 +30,10 @@
 - **维度分类 (Dimension Classification)**：根据列类型自动判断字段适合做维度还是指标
   - 维度候选：String、FixedString、LowCardinality、Date、DateTime、Bool、Enum
   - 指标候选：Int、UInt、Float、Decimal
+- **字段角色 (Field Role)**：字段在分析配置中的用途标记，取值为维度或指标
+- **默认角色 (Default Role)**：由维度分类规则自动推断出的字段角色
+- **角色覆盖 (Role Override)**：用户手动设置的字段角色，优先于默认角色
+- **BETWEEN 算子**：筛选器中的范围条件，用于数值或日期区间
 
 ## 用户界面术语
 

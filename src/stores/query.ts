@@ -1,6 +1,8 @@
 import { create } from "zustand"
 import { executeQuery } from "@/lib/api-client"
-import { buildSelectSql } from "@/lib/query-builder"
+import { buildNextResultWindowSql, inferStableOrder } from "@/lib/stable-result-order"
+
+import type { ColumnMeta } from "@/lib/clickhouse"
 
 export interface TableData {
   columns: string[]
@@ -15,6 +17,7 @@ interface SortState {
 
 interface QueryState {
   currentTable: string | null
+  currentSchema: ColumnMeta[]
   data: TableData | null
   isExecuting: boolean
   error: string | null
@@ -22,6 +25,7 @@ interface QueryState {
   searchQuery: string
   loadedRows: number
   setCurrentTable: (table: string | null) => void
+  setCurrentSchema: (schema: ColumnMeta[]) => void
   setData: (data: TableData | null) => void
   setExecuting: (executing: boolean) => void
   setError: (error: string | null) => void
@@ -41,6 +45,7 @@ function createAbortController(): AbortController {
 
 export const useQueryStore = create<QueryState>((set, get) => ({
   currentTable: null,
+  currentSchema: [],
   data: null,
   isExecuting: false,
   error: null,
@@ -48,6 +53,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   searchQuery: "",
   loadedRows: 0,
   setCurrentTable: (table) => set({ currentTable: table }),
+  setCurrentSchema: (schema) => set({ currentSchema: schema }),
   setData: (data) => set({ data }),
   setExecuting: (executing) => set({ isExecuting: executing }),
   setError: (error) => set({ error }),
@@ -56,9 +62,11 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   loadMore: async () => {
     const { currentTable, loadedRows, executeQuery } = get()
     if (!currentTable) return
-    const sql = buildSelectSql(currentTable.split(".")[0] || "", currentTable.split(".")[1] || currentTable, { limit: 1000 })
-    const offsetSql = sql.replace(/LIMIT \d+$/, `LIMIT 1000 OFFSET ${loadedRows}`)
-    await executeQuery(offsetSql, currentTable, true)
+    const db = currentTable.split(".")[0] || ""
+    const table = currentTable.split(".")[1] || currentTable
+    const stableOrder = inferStableOrder(get().currentSchema)
+    const sql = buildNextResultWindowSql(db, table, stableOrder, loadedRows)
+    await executeQuery(sql, currentTable, true)
   },
   executeQuery: async (sql, tableName, append = false) => {
     const controller = createAbortController()

@@ -1,16 +1,22 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, type ReactNode } from "react"
+import { useDroppable } from "@dnd-kit/core"
 import { usePivotStore } from "@/stores/pivot"
 import { usePivotHistoryStore } from "@/stores/pivot-history"
 import { useDatasetStore } from "@/stores/dataset"
+import { useFieldRoleStore } from "@/stores/field-role"
 import { useLang } from "@/components/lang-provider"
 import { shortType, isDimensionType, isIndicatorType } from "@/lib/column-utils"
 import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
+import { PivotFilterChip } from "./pivot-filter-chip"
+import { HistoryPanel } from "./history-panel"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { createFieldRoleKey, getFieldRole } from "@/lib/field-role"
+import { toPivotHistoryItem } from "@/lib/history-items"
 import type { ColumnMeta } from "@/lib/clickhouse"
-import type { PivotIndicator, CalculatedIndicator } from "@/lib/pivot-sql"
+import type { PivotIndicator, CalculatedIndicator, FilterRule } from "@/lib/pivot-sql"
 
 interface PivotConfigPanelProps {
   schema: ColumnMeta[]
@@ -45,6 +51,7 @@ export function PivotConfigPanel({
     columns,
     indicators,
     calculatedIndicators,
+    filters,
     isExecuting,
     error,
     addRow,
@@ -54,12 +61,16 @@ export function PivotConfigPanel({
     addIndicator,
     removeIndicator,
     updateIndicator,
+    addFilter,
+    updateFilter,
+    removeFilter,
     removeCalculatedIndicator,
     executePivot,
   } = usePivotStore()
 
   const { entries: historyEntries, addEntry } = usePivotHistoryStore()
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
+  const roleOverrides = useFieldRoleStore((s) => s.overrides)
   const dbEntries = historyEntries.filter((e) => e.database === selectedDatabase)
 
   const dimensionCandidates = useMemo(
@@ -72,9 +83,34 @@ export function PivotConfigPanel({
     [schema]
   )
 
+  const getResolvedRole = useCallback(
+    (field: string) => {
+      const meta = schema.find((s) => s.name === field)
+      if (!meta || !selectedDatabase) return null
+      const override = roleOverrides[createFieldRoleKey(selectedDatabase, tableName, field)]
+      return getFieldRole(meta.type, override)
+    },
+    [schema, selectedDatabase, tableName, roleOverrides]
+  )
+
   const usedRowFields = new Set(rows)
   const usedColFields = new Set(columns)
   const usedIndicatorFields = new Set(indicators.map((i) => i.key))
+
+  const handleAddFilter = useCallback(
+    (field: string) => {
+      const resolved = getResolvedRole(field)
+      const meta = schema.find((s) => s.name === field)
+      if (!resolved || !meta) return
+      const isRange = resolved.role === "indicator" || /^Date/.test(meta.type.replace(/^Nullable\((.+)\)$/, "$1"))
+      addFilter({
+        field,
+        op: isRange ? "BETWEEN" : "IN",
+        value: isRange ? ["", ""] : [],
+      })
+    },
+    [addFilter, getResolvedRole, schema]
+  )
 
   const handleAddIndicator = useCallback(
     (field: string) => {
@@ -115,9 +151,47 @@ export function PivotConfigPanel({
   return (
     <div className="flex flex-col h-full overflow-auto">
       <div className="p-2 space-y-2">
+        {/* Filters */}
+        <Section title={_t("pivot.filters")} count={filters.length}>
+          <DroppableZone id="filters">
+            {filters.map((filter) => {
+              const meta = schema.find((s) => s.name === filter.field)
+              const role = getResolvedRole(filter.field)
+              if (!meta || !role) return null
+              return (
+                <PivotFilterChip
+                  key={filter.field}
+                  filter={filter}
+                  role={role.role}
+                  type={meta.type}
+                  database={database}
+                  tableName={tableName}
+                  onChange={(next: FilterRule) => updateFilter(filter.field, next)}
+                  onRemove={() => removeFilter(filter.field)}
+                />
+              )
+            })}
+            <Select onValueChange={(v: string | null) => v && handleAddFilter(v)}>
+              <SelectTrigger className="h-6 w-6 border-none p-0 text-muted-foreground hover:text-foreground">
+                <span className="text-xs">+</span>
+              </SelectTrigger>
+              <SelectContent>
+                {schema
+                  .filter((d) => !filters.some((f) => f.field === d.name))
+                  .filter((d) => getResolvedRole(d.name))
+                  .map((d) => (
+                    <SelectItem key={d.name} value={d.name}>
+                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{shortType(d.type)}</span></span>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </DroppableZone>
+        </Section>
+
         {/* Row Dimensions */}
         <Section title={_t("pivot.rows")} count={rows.length}>
-          <div className="flex flex-wrap gap-1 min-h-[28px] p-1 rounded border border-dashed border-border">
+          <DroppableZone id="rows">
             {rows.map((field) => (
               <Tag key={field} label={field} onRemove={() => removeRow(field)} />
             ))}
@@ -135,12 +209,12 @@ export function PivotConfigPanel({
                   ))}
               </SelectContent>
             </Select>
-          </div>
+          </DroppableZone>
         </Section>
 
         {/* Column Dimensions */}
         <Section title={_t("pivot.columns")} count={columns.length}>
-          <div className="flex flex-wrap gap-1 min-h-[28px] p-1 rounded border border-dashed border-border">
+          <DroppableZone id="columns">
             {columns.map((field) => (
               <Tag key={field} label={field} onRemove={() => removeColumn(field)} />
             ))}
@@ -158,7 +232,7 @@ export function PivotConfigPanel({
                   ))}
               </SelectContent>
             </Select>
-          </div>
+          </DroppableZone>
         </Section>
 
         {/* Indicators */}
@@ -276,35 +350,22 @@ export function PivotConfigPanel({
           </Button>
         </div>
 
-        {/* History */}
-        {dbEntries.length > 0 && (
-          <Section title={_t("pivot.history")} count={dbEntries.length}>
-            <div className="space-y-0.5 max-h-32 overflow-auto">
-              {dbEntries.slice(0, 10).map((entry) => (
-                <button
-                  key={entry.id}
-                  onClick={() => {
-                    usePivotStore.getState().loadConfig(entry.config)
-                    if (entry.tableName) {
-                      useDatasetStore.getState().setSelectedTable(entry.tableName)
-                    }
-                  }}
-                  className="w-full text-left px-1.5 py-1 text-[10px] rounded hover:bg-muted transition-colors"
-                >
-                  <div className="flex items-center gap-1">
-                    <span className="font-medium truncate">{entry.tableName}</span>
-                    <span className="text-muted-foreground">
-                      {entry.config.rows.join(", ")} × {entry.config.indicators.length + entry.config.calculatedIndicators.length}指标
-                    </span>
-                    <span className="ml-auto text-muted-foreground shrink-0">
-                      {entry.rowCount}行
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Section>
-        )}
+        <Section title={_t("pivot.history")} count={dbEntries.length}>
+          <div className="max-h-32 overflow-auto">
+            <HistoryPanel
+              items={dbEntries.slice(0, 10).map(toPivotHistoryItem)}
+              emptyLabel={_t("panel.no_history")}
+              onSelect={(item) => {
+                const entry = dbEntries.find((history) => history.id === item.id)
+                if (!entry) return
+                usePivotStore.getState().loadConfig(entry.config)
+                if (entry.tableName) {
+                  useDatasetStore.getState().setSelectedTable(entry.tableName)
+                }
+              }}
+            />
+          </div>
+        </Section>
       </div>
 
       <CalculatedIndicatorDialog
@@ -325,6 +386,25 @@ export function PivotConfigPanel({
   )
 }
 
+function DroppableZone({
+  id,
+  children,
+}: {
+  id: string
+  children: ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `zone:${id}` })
+  return (
+    <div
+      ref={setNodeRef}
+      aria-label={`${id} drop zone`}
+      className={`flex flex-wrap gap-1 min-h-[28px] p-1 rounded border border-dashed ${isOver ? "border-primary bg-primary/5" : "border-border"}`}
+    >
+      {children}
+    </div>
+  )
+}
+
 function Section({
   title,
   count,
@@ -332,7 +412,7 @@ function Section({
 }: {
   title: string
   count: number
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <div>

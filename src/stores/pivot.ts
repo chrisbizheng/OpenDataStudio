@@ -33,6 +33,9 @@ interface PivotState {
   updateCalculatedIndicator: (key: string, updates: Partial<CalculatedIndicator>) => void
   removeCalculatedIndicator: (key: string) => void
   setFilters: (filters: FilterRule[]) => void
+  addFilter: (filter: FilterRule) => void
+  updateFilter: (field: string, updates: Partial<FilterRule>) => void
+  removeFilter: (field: string) => void
   setSort: (sort: SortRule | null) => void
   setTotals: (totals: TotalsConfig) => void
   executePivot: (tableName: string, database: string) => Promise<void>
@@ -110,9 +113,11 @@ export const usePivotStore = create<PivotState>()(
         set((s) => ({ columns: s.columns.filter((c) => c !== field) })),
 
       addIndicator: (indicator) =>
-        set((s) => ({
-          indicators: [...s.indicators, indicator],
-        })),
+        set((s) =>
+          s.indicators.some((existing) => existing.key === indicator.key)
+            ? s
+            : { indicators: [...s.indicators, indicator] }
+        ),
 
       updateIndicator: (key, updates) =>
         set((s) => ({
@@ -157,6 +162,23 @@ export const usePivotStore = create<PivotState>()(
         })),
 
       setFilters: (filters) => set({ filters }),
+      addFilter: (filter) =>
+        set((s) => ({
+          filters: [
+            ...s.filters.filter((f) => f.field !== filter.field),
+            filter,
+          ],
+        })),
+      updateFilter: (field, updates) =>
+        set((s) => ({
+          filters: s.filters.map((filter) =>
+            filter.field === field ? { ...filter, ...updates } : filter
+          ),
+        })),
+      removeFilter: (field) =>
+        set((s) => ({
+          filters: s.filters.filter((filter) => filter.field !== field),
+        })),
       setSort: (sort) => set({ sort }),
       setTotals: (totals) => set({ totals }),
 
