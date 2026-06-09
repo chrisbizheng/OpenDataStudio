@@ -14,12 +14,13 @@ interface PivotGridProps {
   config: PivotConfig
   data: { columns: string[]; rows: unknown[][] }
   schema: ColumnMeta[]
+  hasExecuted?: boolean
   onCellClick?: (params: { dimensionValues: Record<string, unknown>; indicatorKey: string }) => void
 }
 
 type SortDir = "asc" | "desc" | null
 
-export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps) {
+export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: PivotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<VTable.PivotTable | null>(null)
   const { resolved: theme } = useTheme()
@@ -69,15 +70,17 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
         width: 120,
         minWidth: 80,
         showSort: true,
-        format: ind.format
-          ? (value: number) => {
-              if (typeof value !== "number") return String(value ?? "")
-              return value.toLocaleString(undefined, {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 2,
-              })
-            }
-          : undefined,
+        format: (value: number) => {
+          if (typeof value !== "number") return String(value ?? "")
+          const decimals = ind.decimals ?? 2
+          if (ind.format === "percent") return `${(value * 100).toFixed(decimals)}%`
+          return value.toLocaleString(undefined, {
+            style: ind.format === "currency" ? "currency" : "decimal",
+            currency: ind.format === "currency" ? "USD" : undefined,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: decimals,
+          })
+        },
       })),
       ...config.calculatedIndicators.map((calc) => ({
         indicatorKey: calc.key,
@@ -129,6 +132,8 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
           : undefined,
       },
       widthMode: "autoWidth",
+      defaultRowHeight: 22,
+      defaultHeaderRowHeight: 24,
       rowHierarchyTextStartAlignment: true,
       autoFillWidth: true,
       frozenColCount: config.rows.length,
@@ -231,7 +236,7 @@ export function PivotGrid({ config, data, schema, onCellClick }: PivotGridProps)
   if (data.rows.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        配置维度和指标后点击&quot;执行&quot;
+        {hasExecuted ? _t("grid.no_rows") : "配置维度和指标后点击\"执行\""}
       </div>
     )
   }

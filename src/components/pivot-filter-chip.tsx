@@ -33,6 +33,7 @@ export function PivotFilterChip({
   const [options, setOptions] = useState<unknown[]>([])
   const [loading, setLoading] = useState(false)
   const isRange = role === "indicator" || /^Date/.test(type.replace(/^Nullable\((.+)\)$/, "$1"))
+  const isDateRange = isRange && role !== "indicator"
   const values = Array.isArray(filter.value) ? filter.value : [filter.value]
 
   function toggleOpen() {
@@ -58,24 +59,35 @@ export function PivotFilterChip({
         ×
       </button>
       {open && (
-        <div className="absolute left-0 top-6 z-50 w-56 rounded-md border border-border bg-popover p-2 shadow-md">
+        <div className={isDateRange ? "absolute left-0 top-6 z-50 w-72 rounded-xl border border-border bg-popover p-3 shadow-xl" : "absolute left-0 top-6 z-50 w-56 rounded-md border border-border bg-popover p-2 shadow-md"}>
           {isRange ? (
-            <div className="space-y-2">
-              <div className="text-[10px] text-muted-foreground">{_t("pivot.filter.range")}</div>
-              <Input
-                className="h-7 text-xs"
-                placeholder={_t("pivot.filter.min")}
-                value={String(values[0] ?? "")}
-                type={role === "indicator" ? "number" : "date"}
-                onChange={(e) => onChange({ ...filter, op: "BETWEEN", value: [e.target.value, values[1] ?? ""] })}
-              />
-              <Input
-                className="h-7 text-xs"
-                placeholder={_t("pivot.filter.max")}
-                value={String(values[1] ?? "")}
-                type={role === "indicator" ? "number" : "date"}
-                onChange={(e) => onChange({ ...filter, op: "BETWEEN", value: [values[0] ?? "", e.target.value] })}
-              />
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs font-medium text-foreground">{filter.field}</div>
+                <div className="text-[10px] text-muted-foreground">{_t("pivot.filter.range")}</div>
+              </div>
+              <div className={isDateRange ? "grid grid-cols-2 gap-2" : "space-y-2"}>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-muted-foreground">{_t("pivot.filter.min")}</span>
+                  <Input
+                    className="h-8 rounded-lg bg-background text-[10px]"
+                    placeholder={_t("pivot.filter.min")}
+                    value={String(values[0] ?? "")}
+                    type={role === "indicator" ? "number" : "date"}
+                    onChange={(e) => onChange({ ...filter, op: "BETWEEN", value: [e.target.value, values[1] ?? ""] })}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-muted-foreground">{_t("pivot.filter.max")}</span>
+                  <Input
+                    className="h-8 rounded-lg bg-background text-[10px]"
+                    placeholder={_t("pivot.filter.max")}
+                    value={String(values[1] ?? "")}
+                    type={role === "indicator" ? "number" : "date"}
+                    onChange={(e) => onChange({ ...filter, op: "BETWEEN", value: [values[0] ?? "", e.target.value] })}
+                  />
+                </label>
+              </div>
             </div>
           ) : (
             <div className="space-y-2">

@@ -37,6 +37,7 @@ import { usePivotStore } from "@/stores/pivot"
 import { resolveDrop, type PivotDragItem, type PivotDropZone } from "@/lib/pivot-dnd"
 import { getFieldRole } from "@/lib/field-role"
 import { generatePivotSQL } from "@/lib/pivot-sql"
+import { buildNextPivotIndicator } from "@/lib/pivot-indicator"
 import type { PivotConfig } from "@/lib/pivot-sql"
 import { executeQuery as apiQuery } from "@/lib/api-client"
 import { exportData } from "@/lib/export"
@@ -106,6 +107,7 @@ export default function Home() {
   const [sqlText, setSqlText] = useState("")
   const [showSqlPreview, setShowSqlPreview] = useState(false)
   const [previewSql, setPreviewSql] = useState("")
+  const [previewCopied, setPreviewCopied] = useState(false)
   const [activeDragItem, setActiveDragItem] = useState<PivotDragItem | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -127,6 +129,7 @@ export default function Home() {
     totals: s.totals,
     resultData: s.resultData,
     error: s.error,
+    lastSQL: s.lastSQL,
   })))
   const resetPivot = usePivotStore((s) => s.reset)
   const addPivotRow = usePivotStore((s) => s.addRow)
@@ -266,6 +269,7 @@ export default function Home() {
     }
     const sql = generatePivotSQL(config, selectedTable, selectedDatabase)
     setPreviewSql(sql)
+    setPreviewCopied(false)
     setShowSqlPreview(true)
   }, [selectedTable, selectedDatabase])
 
@@ -288,13 +292,7 @@ export default function Home() {
       if (action.type === "add-column") addPivotColumn(action.field)
       if (action.type === "add-indicator") {
         const meta = schema.find((s) => s.name === action.field)
-        const agg = /count/i.test(action.field) ? "COUNT" : "SUM"
-        addPivotIndicator({
-          key: `${action.field}_${agg.toLowerCase()}`,
-          field: action.field,
-          title: meta?.comment || action.field,
-          aggregation: agg,
-        })
+        addPivotIndicator(buildNextPivotIndicator(action.field, meta?.comment || action.field, usePivotStore.getState().indicators))
       }
       if (action.type === "add-filter") {
         const meta = schema.find((s) => s.name === action.field)
@@ -457,7 +455,7 @@ export default function Home() {
                     /* Pivot View */
                     <div className="flex-1 flex gap-2 overflow-hidden">
                       {/* Pivot Config */}
-                      <div className="w-64 shrink-0 border border-border rounded-md overflow-hidden">
+                      <div className="w-80 shrink-0 border border-border rounded-md overflow-hidden">
                         <PivotConfigPanel
                           schema={schema}
                           tableName={selectedTable ?? ""}
@@ -480,6 +478,7 @@ export default function Home() {
                               config={pivotConfig}
                               data={pivotStore.resultData ?? { columns: [], rows: [] }}
                               schema={schema}
+                              hasExecuted={Boolean(pivotStore.lastSQL)}
                               onCellClick={handleDrilldown}
                             />
                           ) : (
@@ -588,12 +587,14 @@ export default function Home() {
             </div>
             <div className="flex justify-end gap-2 px-4 py-2 border-t border-border">
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(previewSql)
+                onClick={async () => {
+                  await navigator.clipboard.writeText(previewSql)
+                  setPreviewCopied(true)
+                  window.setTimeout(() => setPreviewCopied(false), 1200)
                 }}
-                className="px-3 py-1 text-xs bg-muted rounded hover:bg-muted/80"
+                className="px-3 py-1 text-xs bg-muted rounded transition-colors hover:bg-muted/80"
               >
-                {_t("pivot.copy_sql")}
+                {previewCopied ? _t("pivot.copied_sql") : _t("pivot.copy_sql")}
               </button>
               <button
                 onClick={() => setShowSqlPreview(false)}

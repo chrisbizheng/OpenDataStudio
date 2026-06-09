@@ -9,12 +9,15 @@ import { useFieldRoleStore } from "@/stores/field-role"
 import { useLang } from "@/components/lang-provider"
 import { shortType, isDimensionType, isIndicatorType } from "@/lib/column-utils"
 import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
+import { IndicatorFormatDialog } from "./indicator-format-dialog"
 import { PivotFilterChip } from "./pivot-filter-chip"
 import { HistoryPanel } from "./history-panel"
+import { SnakeSpinner } from "@/components/snake-spinner"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createFieldRoleKey, getFieldRole } from "@/lib/field-role"
 import { toPivotHistoryItem } from "@/lib/history-items"
+import { buildNextPivotIndicator, buildPivotIndicatorTitle } from "@/lib/pivot-indicator"
 import type { ColumnMeta } from "@/lib/clickhouse"
 import type { PivotIndicator, CalculatedIndicator, FilterRule } from "@/lib/pivot-sql"
 
@@ -27,13 +30,25 @@ interface PivotConfigPanelProps {
 }
 
 const AGGREGATION_OPTIONS = [
-  { value: "SUM", label: "SUM" },
-  { value: "AVG", label: "AVG" },
-  { value: "COUNT", label: "COUNT" },
-  { value: "MIN", label: "MIN" },
-  { value: "MAX", label: "MAX" },
-  { value: "DISTINCT_COUNT", label: "COUNT DISTINCT" },
+  { value: "SUM", label: "SUM", shortLabel: "SUM" },
+  { value: "AVG", label: "AVG", shortLabel: "AVG" },
+  { value: "COUNT", label: "COUNT", shortLabel: "CNT" },
+  { value: "MIN", label: "MIN", shortLabel: "MIN" },
+  { value: "MAX", label: "MAX", shortLabel: "MAX" },
+  { value: "DISTINCT_COUNT", label: "COUNT DISTINCT", shortLabel: "DCT" },
 ] as const
+
+function aggregationShortLabel(value: PivotIndicator["aggregation"]) {
+  return AGGREGATION_OPTIONS.find((option) => option.value === value)?.shortLabel ?? value
+}
+
+function formatLabel(indicator: { format?: "number" | "percent" | "currency"; decimals?: number }) {
+  const format = indicator.format ?? "number"
+  const decimals = indicator.decimals ?? 2
+  if (format === "percent") return `百分比 · ${decimals}位`
+  if (format === "currency") return `货币 · ${decimals}位`
+  return `数字 · ${decimals}位`
+}
 
 export function PivotConfigPanel({
   schema,
@@ -45,6 +60,9 @@ export function PivotConfigPanel({
   const { _t } = useLang()
   const [showCalcDialog, setShowCalcDialog] = useState(false)
   const [editingCalc, setEditingCalc] = useState<CalculatedIndicator | undefined>()
+  const [formatIndicatorKey, setFormatIndicatorKey] = useState<string | undefined>()
+  const [indicatorSelectValue, setIndicatorSelectValue] = useState("")
+  const [indicatorTitleDrafts, setIndicatorTitleDrafts] = useState<Record<string, string>>({})
 
   const {
     rows,
@@ -68,7 +86,7 @@ export function PivotConfigPanel({
     executePivot,
   } = usePivotStore()
 
-  const { entries: historyEntries, addEntry } = usePivotHistoryStore()
+  const { entries: historyEntries, addEntry, clear: clearHistory } = usePivotHistoryStore()
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
   const roleOverrides = useFieldRoleStore((s) => s.overrides)
   const dbEntries = historyEntries.filter((e) => e.database === selectedDatabase)
@@ -95,7 +113,7 @@ export function PivotConfigPanel({
 
   const usedRowFields = new Set(rows)
   const usedColFields = new Set(columns)
-  const usedIndicatorFields = new Set(indicators.map((i) => i.key))
+  const formatIndicator = indicators.find((indicator) => indicator.key === formatIndicatorKey)
 
   const handleAddFilter = useCallback(
     (field: string) => {
@@ -115,19 +133,27 @@ export function PivotConfigPanel({
   const handleAddIndicator = useCallback(
     (field: string) => {
       const meta = schema.find((s) => s.name === field)
-      const agg = /count/i.test(field) ? "COUNT" : "SUM"
-      addIndicator({
-        key: `${field}_${agg.toLowerCase()}`,
-        field,
-        title: meta?.comment || field,
-        aggregation: agg,
-      })
+      addIndicator(buildNextPivotIndicator(field, meta?.comment || field, indicators))
     },
-    [schema, addIndicator]
+    [schema, addIndicator, indicators]
   )
 
-  const handleExecute = useCallback(() => {
-    executePivot(tableName, database)
+  const commitIndicatorTitle = useCallback(
+    (key: string) => {
+      const draft = indicatorTitleDrafts[key]
+      if (draft === undefined) return
+      updateIndicator(key, { title: draft })
+      setIndicatorTitleDrafts((current) => {
+        const next = { ...current }
+        delete next[key]
+        return next
+      })
+    },
+    [indicatorTitleDrafts, updateIndicator]
+  )
+
+  const handleExecute = useCallback(async () => {
+    await executePivot(tableName, database)
     const state = usePivotStore.getState()
     if (state.resultData) {
       addEntry({
@@ -144,13 +170,13 @@ export function PivotConfigPanel({
         },
         rowCount: state.resultData.rows.length,
       })
+      onExecute()
     }
-    onExecute()
   }, [executePivot, tableName, database, addEntry, onExecute])
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
-      <div className="p-2 space-y-2">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="p-2 space-y-2 flex flex-col min-h-0 flex-1">
         {/* Filters */}
         <Section title={_t("pivot.filters")} count={filters.length}>
           <DroppableZone id="filters">
@@ -172,8 +198,8 @@ export function PivotConfigPanel({
               )
             })}
             <Select onValueChange={(v: string | null) => v && handleAddFilter(v)}>
-              <SelectTrigger className="h-6 w-6 border-none p-0 text-muted-foreground hover:text-foreground">
-                <span className="text-xs">+</span>
+              <SelectTrigger className="h-6 w-auto justify-center rounded border-none p-0 px-1 text-[10px] text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground [&_svg]:hidden *:data-[slot=select-value]:flex-none">
+                <SelectValue placeholder="+添加筛选字段" />
               </SelectTrigger>
               <SelectContent>
                 {schema
@@ -196,8 +222,8 @@ export function PivotConfigPanel({
               <Tag key={field} label={field} onRemove={() => removeRow(field)} />
             ))}
             <Select onValueChange={(v: string | null) => v && addRow(v)}>
-              <SelectTrigger className="h-6 w-6 border-none p-0 text-muted-foreground hover:text-foreground">
-                <span className="text-xs">+</span>
+              <SelectTrigger className="h-6 w-auto justify-center rounded border-none p-0 px-1 text-[10px] text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground [&_svg]:hidden *:data-[slot=select-value]:flex-none">
+                <SelectValue placeholder="+ 添加行维度" />
               </SelectTrigger>
               <SelectContent>
                 {dimensionCandidates
@@ -219,8 +245,8 @@ export function PivotConfigPanel({
               <Tag key={field} label={field} onRemove={() => removeColumn(field)} />
             ))}
             <Select onValueChange={(v: string | null) => v && addColumn(v)}>
-              <SelectTrigger className="h-6 w-6 border-none p-0 text-muted-foreground hover:text-foreground">
-                <span className="text-xs">+</span>
+              <SelectTrigger className="h-6 w-auto justify-center rounded border-none p-0 px-1 text-[10px] text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground [&_svg]:hidden *:data-[slot=select-value]:flex-none">
+                <SelectValue placeholder="+ 添加列维度" />
               </SelectTrigger>
               <SelectContent>
                 {dimensionCandidates
@@ -237,42 +263,75 @@ export function PivotConfigPanel({
 
         {/* Indicators */}
         <Section title={_t("pivot.indicators")} count={indicators.length}>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1 min-h-[28px] p-1 rounded border border-dashed border-border">
             {indicators.map((ind) => (
-              <div key={ind.key} className="flex items-center gap-1 text-xs">
+              <span
+                key={ind.key}
+                className="group flex w-full max-w-full items-center gap-1 rounded-md border-l-2 border-emerald-400 bg-muted/45 px-2 py-1.5 text-[10px] text-foreground dark:border-emerald-500 dark:bg-muted/25"
+              >
+                <input
+                  value={indicatorTitleDrafts[ind.key] ?? ind.title}
+                  onChange={(e) => setIndicatorTitleDrafts((current) => ({ ...current, [ind.key]: e.target.value }))}
+                  onBlur={() => commitIndicatorTitle(ind.key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  className="min-w-0 flex-1 rounded-sm bg-transparent px-1 py-0.5 text-[10px] font-medium outline-none transition-[font-size] focus:bg-background/70 focus:text-xs"
+                  title={ind.field}
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormatIndicatorKey(ind.key)}
+                  className="ml-auto flex min-w-0 max-w-28 shrink-0 flex-col items-start rounded bg-background/70 px-1.5 py-0.5 text-left text-muted-foreground transition-[max-width] hover:bg-background group-focus-within:max-w-36"
+                  title="点击设置格式"
+                >
+                  <span className="max-w-full truncate text-[10px]">{ind.field}</span>
+                  <span className="max-w-full truncate text-[9px]">{formatLabel(ind)}</span>
+                </button>
                 <Select
                   value={ind.aggregation}
-                  onValueChange={(v: string | null) =>
-                    v && updateIndicator(ind.key, { aggregation: v as PivotIndicator["aggregation"] })
-                  }
+                  onValueChange={(v: string | null) => {
+                    if (!v) return
+                    updateIndicator(ind.key, { aggregation: v as PivotIndicator["aggregation"] })
+                    if (ind.title === buildPivotIndicatorTitle(ind.field, ind.aggregation)) {
+                      updateIndicator(ind.key, { title: buildPivotIndicatorTitle(ind.field, v as PivotIndicator["aggregation"]) })
+                    }
+                  }}
                 >
-                  <SelectTrigger className="h-6 w-24 text-[10px]">
-                    <SelectValue />
+                  <SelectTrigger className="h-6 w-12 shrink-0 border-0 bg-background/70 px-1 text-[9px] text-foreground shadow-none" title={AGGREGATION_OPTIONS.find((option) => option.value === ind.aggregation)?.label}>
+                    <span>{aggregationShortLabel(ind.aggregation)}</span>
                   </SelectTrigger>
                   <SelectContent>
                     {AGGREGATION_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
+                      <SelectItem key={opt.value} value={opt.value} className="text-[10px]">
                         {opt.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="flex-1 truncate">{ind.field}</span>
                 <button
                   onClick={() => removeIndicator(ind.key)}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  className="h-5 w-5 shrink-0 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
                   ×
                 </button>
-              </div>
+              </span>
             ))}
-            <Select onValueChange={(v: string | null) => v && handleAddIndicator(v)}>
-              <SelectTrigger className="h-6 text-[10px] text-muted-foreground">
+            <Select
+              value={indicatorSelectValue}
+              onValueChange={(v: string | null) => {
+                if (!v) return
+                handleAddIndicator(v)
+                setIndicatorSelectValue("")
+              }}
+            >
+              <SelectTrigger className="h-6 w-auto justify-center rounded border-none p-0 px-1 text-[10px] text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground [&_svg]:hidden *:data-[slot=select-value]:flex-none">
                 <SelectValue placeholder={`+ ${_t("pivot.add_indicator")}`} />
               </SelectTrigger>
               <SelectContent>
                 {indicatorCandidates
-                  .filter((c) => !usedIndicatorFields.has(`${c.name}_sum`))
                   .map((c) => (
                     <SelectItem key={c.name} value={c.name}>
                       <span className="text-xs">{c.name} <span className="text-muted-foreground">{shortType(c.type)}</span></span>
@@ -285,41 +344,48 @@ export function PivotConfigPanel({
 
         {/* Calculated Indicators */}
         <Section title={_t("pivot.calculated")} count={calculatedIndicators.length}>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1 min-h-[28px] p-1 rounded border border-dashed border-border">
             {calculatedIndicators.map((calc) => (
-              <div key={calc.key} className="flex items-center gap-1 text-xs">
-                <span className="flex-1 truncate font-medium">{calc.title}</span>
-                <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-                  {calc.expression}
+              <div
+                key={calc.key}
+                className="flex w-full max-w-full items-center gap-1 rounded-md border-l-2 border-violet-400 bg-muted/45 px-2 py-1.5 text-[10px] text-foreground dark:border-violet-500 dark:bg-muted/25"
+              >
+                <div className="min-w-0 flex-1 px-1">
+                  <div className="truncate text-[10px] font-medium">{calc.title}</div>
+                  <div className="truncate text-[9px] text-muted-foreground" title={calc.expression}>
+                    {calc.expression}
+                  </div>
+                </div>
+                <span className="shrink-0 rounded bg-background/70 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                  {formatLabel(calc)}
                 </span>
                 <button
                   onClick={() => {
                     setEditingCalc(calc)
                     setShowCalcDialog(true)
                   }}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  className="h-5 w-5 shrink-0 rounded text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   ✎
                 </button>
                 <button
                   onClick={() => removeCalculatedIndicator(calc.key)}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
+                  className="h-5 w-5 shrink-0 rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
                   ×
                 </button>
               </div>
             ))}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 text-[10px] w-full"
+            <button
+              type="button"
+              className="h-6 rounded px-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => {
                 setEditingCalc(undefined)
                 setShowCalcDialog(true)
               }}
             >
               + {_t("pivot.add_calculated")}
-            </Button>
+            </button>
           </div>
         </Section>
 
@@ -338,7 +404,9 @@ export function PivotConfigPanel({
             onClick={handleExecute}
             disabled={isExecuting}
           >
-            {isExecuting ? "..." : _t("pivot.execute")}
+            {isExecuting ? (
+              <SnakeSpinner size={14} />
+            ) : _t("pivot.execute")}
           </Button>
           <Button
             variant="outline"
@@ -350,11 +418,17 @@ export function PivotConfigPanel({
           </Button>
         </div>
 
-        <Section title={_t("pivot.history")} count={dbEntries.length}>
-          <div className="max-h-32 overflow-auto">
+        <div className="flex flex-col flex-1 min-h-0 border-t border-border">
+          <div className="flex border-b border-border shrink-0">
+            <div className="flex-1 text-[10px] font-medium py-1.5 px-2 text-foreground border-b-2 border-foreground">
+              {_t("panel.history")}
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto">
             <HistoryPanel
-              items={dbEntries.slice(0, 10).map(toPivotHistoryItem)}
+              items={dbEntries.map(toPivotHistoryItem)}
               emptyLabel={_t("panel.no_history")}
+              onClear={clearHistory}
               onSelect={(item) => {
                 const entry = dbEntries.find((history) => history.id === item.id)
                 if (!entry) return
@@ -365,7 +439,7 @@ export function PivotConfigPanel({
               }}
             />
           </div>
-        </Section>
+        </div>
       </div>
 
       <CalculatedIndicatorDialog
@@ -379,6 +453,18 @@ export function PivotConfigPanel({
             usePivotStore.getState().updateCalculatedIndicator(editingCalc.key, calc)
           } else {
             usePivotStore.getState().addCalculatedIndicator(calc)
+          }
+        }}
+      />
+
+      <IndicatorFormatDialog
+        key={formatIndicatorKey ?? "format-dialog"}
+        open={!!formatIndicatorKey}
+        onOpenChange={(open) => { if (!open) setFormatIndicatorKey(undefined) }}
+        indicator={formatIndicator}
+        onSave={(format, decimals) => {
+          if (formatIndicatorKey) {
+            updateIndicator(formatIndicatorKey, { format, decimals })
           }
         }}
       />

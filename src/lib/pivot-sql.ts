@@ -8,12 +8,15 @@ export type AggregationType =
   | "MAX"
   | "DISTINCT_COUNT"
 
+export type IndicatorFormat = "number" | "percent" | "currency"
+
 export interface PivotIndicator {
   key: string
   field: string
   title: string
   aggregation: AggregationType
-  format?: string
+  format?: IndicatorFormat
+  decimals?: number
 }
 
 export interface CalculatedIndicator {
@@ -21,7 +24,7 @@ export interface CalculatedIndicator {
   title: string
   expression: string
   dependIndicatorKeys: string[]
-  format?: "number" | "percent" | "currency"
+  format?: IndicatorFormat
   decimals?: number
 }
 
