@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildDistinctFilterValuesSQL, toggleFilterValue } from "../pivot-filter-values"
+import { buildDistinctFilterValuesSQL, toggleFilterValue } from "../pivot-sql"
 
 describe("pivot filter values", () => {
   it("为字段筛选值生成去重查询", () => {

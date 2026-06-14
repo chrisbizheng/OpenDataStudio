@@ -1,5 +1,5 @@
-import type { ColumnMeta } from "./clickhouse"
-import { NUM_KEYWORDS, isIndicatorType, isDimensionType } from "./column-utils"
+import type { ColumnMeta } from "./types"
+import { isMetricByName, isIndicatorType, isDimensionType, isMetricColumn } from "./column-utils"
 
 export function suggestQuestions(schema: ColumnMeta[], lang: string): string[] {
   const suggestions: string[] = []
@@ -10,14 +10,14 @@ export function suggestQuestions(schema: ColumnMeta[], lang: string): string[] {
   const isZh = lang === "zh"
 
   if (nums.length > 0 && strs.length > 0) {
-    const metric = nums.find((c) => NUM_KEYWORDS.some((k) => c.name.toLowerCase().includes(k))) || nums[0]
+    const metric = nums.find((c) => isMetricByName(c.name)) || nums[0]
     const dim = strs[0]
     suggestions.push(isZh
       ? `按 ${dim.name} 分组显示 ${metric.name} 前 10`
       : `Show top 10 by ${metric.name} grouped by ${dim.name}`)
   }
   if (nums.length > 0) {
-    const metric = nums.find((c) => NUM_KEYWORDS.some((k) => c.name.toLowerCase().includes(k))) || nums[0]
+    const metric = nums.find((c) => isMetricByName(c.name)) || nums[0]
     suggestions.push(isZh ? `${metric.name} 的平均值是多少？` : `What is the average ${metric.name}?`)
   }
   if (strs.length > 0) {
@@ -48,9 +48,8 @@ export function suggestFollowUp(
     ? groupMatch[1].split(",").map((c) => c.trim().replace(/^`|`$/g, "").replace(/\s+AS\s+\S+$/i, "").trim()).filter(Boolean)
     : []
 
-  const metricPattern = /^(sum|total|avg|min|max|count|amount|qty|quantity|sales|revenue|sold|units|pct|percent)/i
-  const metricCols = cols.filter((c) => metricPattern.test(c))
-  const dimCols = cols.filter((c) => !metricPattern.test(c))
+  const metricCols = cols.filter((c) => isMetricColumn(c))
+  const dimCols = cols.filter((c) => !isMetricColumn(c))
 
   const hasOrderBy = /\bORDER\s+BY\b/i.test(agentSql || "")
   const hasLimit = /\bLIMIT\b/i.test(agentSql || "")

@@ -12,14 +12,19 @@ export function shortType(type: string): string {
     .replace(/^LowCardinality\((.+)\)$/, "$1")
 }
 
-const METRIC_PATTERN = /amount|total|price|quantity|revenue|cost|sales|value|count|volume|budget|profit|sum|balance|fee|rate/i
+const METRIC_KEYWORDS = ["amount", "avg", "balance", "budget", "cost", "count", "fee", "max", "min", "pct", "percent", "price", "profit", "qty", "quantity", "rate", "revenue", "sales", "sold", "sum", "total", "units", "value", "volume"]
+
+const METRIC_PATTERN = new RegExp(`^(${METRIC_KEYWORDS.join("|")})`, "i")
 
 export function isMetricColumn(name?: string): boolean {
   if (!name) return false
   return METRIC_PATTERN.test(name)
 }
 
-export const NUM_KEYWORDS = ["amount", "total", "price", "quantity", "revenue", "cost", "sales", "value", "count", "volume", "budget", "profit", "sum", "balance", "fee", "rate"]
+export function isMetricByName(name: string): boolean {
+  const lower = name.toLowerCase()
+  return METRIC_KEYWORDS.some((k) => lower.includes(k))
+}
 
 export function isDimensionType(type: string): boolean {
   const base = unwrapNullable(type)

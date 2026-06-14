@@ -1,8 +1,27 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import { generatePivotSQL, type PivotConfig, type PivotIndicator, type CalculatedIndicator, type FilterRule, type SortRule, type TotalsConfig } from "@/lib/pivot-sql"
+import { type PivotConfig, type PivotIndicator, type CalculatedIndicator, type FilterRule, type SortRule, type TotalsConfig } from "@/lib/pivot-sql"
 import { validate } from "@/lib/expression"
-import { executeQuery } from "@/lib/api-client"
+import { migratePivotPersisted } from "./migrate-pivot-store"
+
+const AGG_SUFFIXES: Record<string, string> = {
+  _distinct_count: "DISTINCT_COUNT",
+  _sum: "SUM",
+  _avg: "AVG",
+  _count: "COUNT",
+  _min: "MIN",
+  _max: "MAX",
+}
+
+export function migrateIndicatorKey(oldKey: string): string | null {
+  for (const [suffix, agg] of Object.entries(AGG_SUFFIXES)) {
+    if (oldKey.endsWith(suffix)) {
+      const field = oldKey.slice(0, -suffix.length)
+      if (field) return `${field}-${agg}`
+    }
+  }
+  return null
+}
 
 export interface PivotResult {
   columns: string[]
@@ -38,9 +57,13 @@ interface PivotState {
   removeFilter: (field: string) => void
   setSort: (sort: SortRule | null) => void
   setTotals: (totals: TotalsConfig) => void
-  executePivot: (tableName: string, database: string) => Promise<void>
+  setResultData: (data: PivotResult | null) => void
+  setExecuting: (v: boolean) => void
+  setError: (error: string | null) => void
+  setLastSQL: (sql: string | null) => void
   reset: () => void
   loadConfig: (config: PivotConfig) => void
+  getPivotConfig: () => PivotConfig
 }
 
 const defaultTotals: TotalsConfig = {
@@ -62,10 +85,18 @@ const initialState = {
   lastSQL: null as string | null,
 }
 
-type PivotStateSnapshot = typeof initialState
+export interface PivotConfigSource {
+  rows: string[]
+  columns: string[]
+  indicators: PivotIndicator[]
+  calculatedIndicators: CalculatedIndicator[]
+  filters: FilterRule[]
+  sort: SortRule | null
+  totals: TotalsConfig
+}
 
-function validatePivotExecution(
-  state: PivotStateSnapshot,
+export function validatePivotExecution(
+  state: PivotConfigSource,
   tableName: string,
   database: string
 ): string | null {
@@ -81,7 +112,7 @@ function validatePivotExecution(
   return null
 }
 
-function buildPivotConfig(state: PivotStateSnapshot): PivotConfig {
+export function buildPivotConfig(state: PivotConfigSource): PivotConfig {
   return {
     rows: state.rows,
     columns: state.columns,
@@ -136,7 +167,7 @@ export const usePivotStore = create<PivotState>()(
           ...get().indicators.map((i) => i.key),
           ...get().calculatedIndicators.map((c) => c.key),
         ]
-        const validation = validate(indicator.expression, allKeys)
+        const validation = validate(indicator.logic, allKeys)
         if (!validation.valid) {
           set({ error: validation.errors.join("; ") })
           return
@@ -181,36 +212,12 @@ export const usePivotStore = create<PivotState>()(
         })),
       setSort: (sort) => set({ sort }),
       setTotals: (totals) => set({ totals }),
+      setResultData: (data) => set({ resultData: data }),
+      setExecuting: (v) => set({ isExecuting: v }),
+      setError: (error) => set({ error }),
+      setLastSQL: (sql) => set({ lastSQL: sql }),
 
-      executePivot: async (tableName, database) => {
-        const state = get()
-        const validationError = validatePivotExecution(state, tableName, database)
-        if (validationError) {
-          set({ error: validationError })
-          return
-        }
-
-        set({ isExecuting: true, error: null })
-
-        const config = buildPivotConfig(state)
-        const sql = generatePivotSQL(config, tableName, database)
-
-        try {
-          const json = await executeQuery(sql, database)
-          set({
-            resultData: { columns: json.columns, rows: json.rows },
-            isExecuting: false,
-            error: null,
-            lastSQL: sql,
-          })
-        } catch (e) {
-          set({
-            error: e instanceof Error ? e.message : "网络错误",
-            isExecuting: false,
-            lastSQL: sql,
-          })
-        }
-      },
+      getPivotConfig: () => buildPivotConfig(get()),
 
       reset: () => set(initialState),
 
@@ -239,6 +246,7 @@ export const usePivotStore = create<PivotState>()(
         sort: state.sort,
         totals: state.totals,
       }),
+      merge: (persisted, current) => migratePivotPersisted(persisted, current) as typeof current,
     }
   )
 )

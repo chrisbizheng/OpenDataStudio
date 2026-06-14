@@ -17,11 +17,11 @@ interface QueryPanelsProps {
 type Tab = "history" | "saved" | "community"
 
 export function QueryPanels({ onSelectSql }: QueryPanelsProps) {
-  const { _t } = useLang()
+  const { _t, lang } = useLang()
   const [tab, setTab] = useState<Tab>("history")
   const { entries, clearHistory } = useSqlHistoryStore(useShallow((s) => ({
     entries: s.entries,
-    clearHistory: s.clearHistory,
+    clearHistory: s.clear,
   })))
   const { queries, remove } = useSavedQueriesStore(useShallow((s) => ({
     queries: s.queries,
@@ -48,7 +48,7 @@ export function QueryPanels({ onSelectSql }: QueryPanelsProps) {
       <div className="flex-1 overflow-auto">
         {tab === "history" && (
           <HistoryPanel
-            items={entries.map(toSqlHistoryItem)}
+            items={entries.map((e) => toSqlHistoryItem(e, lang))}
             onSelect={(item) => onSelectSql(item.title)}
             onClear={clearHistory}
           />
@@ -73,7 +73,7 @@ function SavedPanel({
   onSelect: (sql: string) => void
   onRemove: (id: string) => void
 }) {
-  const { _t } = useLang()
+  const { _t, lang } = useLang()
   if (queries.length === 0) {
     return <div className="text-xs text-muted-foreground p-3">{_t("panel.no_saved")}</div>
   }
@@ -97,7 +97,7 @@ function SavedPanel({
             </button>
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">
-            {formatTime(q.createdAt)}
+            {formatTime(q.createdAt, lang)}
           </div>
         </div>
       ))}

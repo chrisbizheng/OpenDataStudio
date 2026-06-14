@@ -1,22 +1,5 @@
-interface SeriesConfig {
-  yKey: string
-  chartType?: string
-  label?: string
-}
-
-type RawViz = {
-  type?: string
-  config?: {
-    xKey?: string
-    yKey?: string
-    series?: SeriesConfig[]
-    title?: string
-    showLegend?: boolean
-    height?: number
-  }
-} | null | undefined
-
-const METRIC_PATTERN = /^(sum|total|avg|min|max|count|amount|qty|quantity|sales|revenue|sold|units)/i
+import { isMetricColumn } from "./column-utils"
+import type { RawViz } from "./agent-types"
 
 export function fixVisualization(
   rawViz: RawViz,
@@ -32,7 +15,7 @@ export function fixVisualization(
     const validSeries = cfg.series.filter((s) => columns.includes(s.yKey))
     if (validSeries.length === 0) {
       // All series invalid — fall back to auto-detect
-      const numericCol = columns.find((c) => METRIC_PATTERN.test(c)) || columns[columns.length - 1]
+      const numericCol = columns.find((c) => isMetricColumn(c)) || columns[columns.length - 1]
       const labelCol = columns.find((c) => c !== numericCol) || columns[0]
       return {
         ...rawViz,
@@ -61,7 +44,7 @@ export function fixVisualization(
   if (xOk && yOk) return rawViz
 
   const numericCol = columns.find((c) =>
-    c === cfg.yKey || METRIC_PATTERN.test(c)
+    c === cfg.yKey || isMetricColumn(c)
   ) || columns[columns.length - 1]
   const labelCol = columns.find((c) => c !== numericCol) || columns[0]
 
@@ -92,7 +75,7 @@ export function inferVisualization(
 
   if (groupCols.length === 0) return null
 
-  const metricCols = columns.filter((c) => METRIC_PATTERN.test(c))
+  const metricCols = columns.filter((c) => isMetricColumn(c))
   const dimCol = groupCols[0]
 
   // Multi-metric: generate series for composed chart

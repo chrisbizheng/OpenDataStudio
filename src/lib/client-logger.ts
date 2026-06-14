@@ -25,20 +25,6 @@ export function appLog(...args: unknown[]) {
   }
 }
 
-export function downloadLogs() {
-  const logs = getLogs().join("\n")
-  const blob = new Blob([logs], { type: "text/plain" })
-  const a = document.createElement("a")
-  a.href = URL.createObjectURL(blob)
-  a.download = `ods-log-${Date.now()}.txt`
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
-
-export function clearLogs() {
-  localStorage.removeItem(KEY)
-}
-
 export function getTraceId(): string {
   return crypto.randomUUID()
 }

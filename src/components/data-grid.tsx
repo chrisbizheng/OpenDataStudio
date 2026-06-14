@@ -7,8 +7,7 @@ import { useLang } from "@/components/lang-provider"
 import { shortType } from "@/lib/column-utils"
 import { SearchBar } from "@/components/search-bar"
 import { shouldLoadNextResultWindow } from "@/lib/incremental-loading"
-import { buildGridColumns } from "@/lib/grid-columns"
-import type { ColumnMeta } from "@/lib/clickhouse"
+import type { ColumnMeta } from "@/lib/types"
 
 interface DataGridProps {
   columns: string[]
@@ -48,7 +47,13 @@ export function DataGrid({
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const [hoveredCol, setHoveredCol] = useState<string | null>(null)
 
-  const gridColumns = useMemo(() => buildGridColumns(columns, schema), [columns, schema])
+  const gridColumns = useMemo(() => {
+    const metaByName = new Map(schema.map((f) => [f.name, f]))
+    return columns.map((name) => {
+      const meta = metaByName.get(name)
+      return { name, type: meta?.type, comment: meta?.comment }
+    })
+  }, [columns, schema])
 
   const colWidths = useMemo(() => {
     const widths: number[] = [28]

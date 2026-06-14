@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { usePivotStore } from "../pivot"
+import { buildPivotIndicatorTitle } from "@/lib/pivot-sql"
 
 describe("usePivotStore", () => {
   beforeEach(() => {
@@ -13,6 +14,20 @@ describe("usePivotStore", () => {
     usePivotStore.getState().addIndicator(indicator)
 
     expect(usePivotStore.getState().indicators).toEqual([indicator])
+  })
+
+  it("修改聚合后更新 key 和 title，允许同字段再添加", () => {
+    usePivotStore.getState().addIndicator({ key: "sales-SUM", field: "sales", title: "sales-SUM", aggregation: "SUM" as const })
+    expect(usePivotStore.getState().indicators).toHaveLength(1)
+
+    const newKey = buildPivotIndicatorTitle("sales", "AVG")
+    usePivotStore.getState().updateIndicator("sales-SUM", { aggregation: "AVG" as const, key: newKey, title: newKey })
+    expect(usePivotStore.getState().indicators[0].key).toBe("sales-AVG")
+    expect(usePivotStore.getState().indicators[0].aggregation).toBe("AVG")
+
+    usePivotStore.getState().addIndicator({ key: "sales-SUM", field: "sales", title: "sales-SUM", aggregation: "SUM" as const })
+    expect(usePivotStore.getState().indicators).toHaveLength(2)
+    expect(usePivotStore.getState().indicators.map((i) => i.key).sort()).toEqual(["sales-AVG", "sales-SUM"])
   })
 
   it("添加和更新筛选器", () => {

@@ -1,18 +1,13 @@
 "use client"
 
-import { useShallow } from "zustand/react/shallow"
-import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
 import { formatRowCount } from "@/lib/format"
+import { useCatalog } from "@/hooks/use-catalog"
 
 export function StatusBar() {
   const { _t } = useLang()
-  const { isConnected, tables, totalRows, error } = useDatasetStore(useShallow((s) => ({
-    isConnected: s.isConnected,
-    tables: s.tables,
-    totalRows: s.totalRows,
-    error: s.error,
-  })))
+  const { tables, isConnected, error } = useCatalog()
+  const totalRows = tables.reduce((sum, t) => sum + t.rowCount, 0)
 
   return (
     <div className="flex items-center justify-between px-3 py-1 text-xs text-muted-foreground border-t border-border bg-muted/20">

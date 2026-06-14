@@ -1,3 +1,8 @@
+export function matchRow(row: unknown[], query: string): boolean {
+  const q = query.toLowerCase()
+  return row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
+}
+
 export function createGridFilter() {
   let lastRowsRef: unknown[][] | null = null
   let lastQuery = ""
@@ -8,10 +13,7 @@ export function createGridFilter() {
     if (rows === lastRowsRef && searchQuery === lastQuery && lastResult) {
       return lastResult
     }
-    const q = searchQuery.toLowerCase()
-    const result = rows.filter((row) =>
-      row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
-    )
+    const result = rows.filter((row) => matchRow(row, searchQuery))
     lastRowsRef = rows
     lastQuery = searchQuery
     lastResult = result

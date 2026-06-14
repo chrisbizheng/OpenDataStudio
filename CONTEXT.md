@@ -2,6 +2,9 @@
 
 ## 核心概念
 
+- **目录 (Catalog)**：ClickHouse 元数据的深模块，隐藏获取、缓存、去重、错误恢复。接口：`loadDatabases/loadTables/loadSchema` + `getTables/getSchema` + `invalidate`。缝合点：`CatalogPort`（2 个适配器：HTTP 生产、Memory 测试）
+- **查询引擎 (Query Engine)**：SQL 执行的深模块，隐藏 HTTP 传输、请求中止、并发去重。接口：`execute(sql, database?) → QueryResult | null` + `cancel()`。缝合点：`QueryPort`（2 个适配器：HTTP 生产、Memory 测试）。新请求自动取消前一次，中止返回 null 而非抛异常
+- **选择 (Selection)**：用户当前选中的数据库和表，存储在 dataset store 中，与目录数据无关
 - **表 (Table)**：ClickHouse 中的数据表，是数据探索的基本单位
 - **列 (Column)**：表中的字段，有类型信息（String、Int、DateTime 等）
 - **Schema**：表的列定义集合，包含列名、类型、注释

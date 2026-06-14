@@ -88,8 +88,13 @@ describe("generatePivotSQL", () => {
         {
           key: "profit_rate",
           title: "利润率",
-          expression: "([[sales_sum]] - [[cost_sum]]) / [[sales_sum]]",
-          dependIndicatorKeys: ["sales_sum", "cost_sum"],
+          logic: { type: "call", func: "divide", args: [
+            { type: "call", func: "minus", args: [
+              { type: "ref", key: "sales_sum" },
+              { type: "ref", key: "cost_sum" },
+            ]},
+            { type: "ref", key: "sales_sum" },
+          ]},
         },
       ],
     }
@@ -111,14 +116,18 @@ describe("generatePivotSQL", () => {
         {
           key: "c",
           title: "c",
-          expression: "[[a]] + [[b]]",
-          dependIndicatorKeys: ["a", "b"],
+          logic: { type: "call", func: "plus", args: [
+            { type: "ref", key: "a" },
+            { type: "ref", key: "b" },
+          ]},
         },
         {
           key: "d",
           title: "d",
-          expression: "[[c]] * 2",
-          dependIndicatorKeys: ["c"],
+          logic: { type: "call", func: "multiply", args: [
+            { type: "ref", key: "c" },
+            { type: "literal", value: 2, dataType: "Int64" },
+          ]},
         },
       ],
     }
@@ -235,5 +244,28 @@ describe("generatePivotSQL", () => {
     }
     const sql = generatePivotSQL(config, "t", "db")
     expect(sql).toContain("LIKE '%test%'")
+  })
+
+  it("循环依赖的计算指标抛出错误", () => {
+    const config: PivotConfig = {
+      rows: ["region"],
+      columns: [],
+      indicators: [
+        { key: "a", field: "x", title: "", aggregation: "SUM" },
+      ],
+      calculatedIndicators: [
+        {
+          key: "c1",
+          title: "c1",
+          logic: { type: "ref", key: "c2" },
+        },
+        {
+          key: "c2",
+          title: "c2",
+          logic: { type: "ref", key: "c1" },
+        },
+      ],
+    }
+    expect(() => generatePivotSQL(config, "t", "db")).toThrow(/circular/i)
   })
 })

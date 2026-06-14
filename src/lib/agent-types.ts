@@ -18,10 +18,12 @@ export interface Message {
   rows?: unknown[][]
   columns?: string[]
   visualization?: VisualizationConfig | null
+}
+
+export interface MessageUIState {
   thinkingExpanded?: boolean
   thinkingStartTime?: number
   thinkingElapsedMs?: number
-  streamingContent?: string
 }
 
 export interface SeriesConfig {
@@ -46,3 +48,15 @@ export interface SSEEvent {
   type: "token" | "done" | "error"
   data: Record<string, unknown>
 }
+
+export type RawViz = {
+  type?: string
+  config?: {
+    xKey?: string
+    yKey?: string
+    series?: SeriesConfig[]
+    title?: string
+    showLegend?: boolean
+    height?: number
+  }
+} | null | undefined

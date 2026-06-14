@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLang } from "@/components/lang-provider"
 import { useLlmStore } from "@/stores/llm-config"
+import { buildLlmHeaders } from "@/lib/llm-client"
 import type { LlmConfig } from "@/lib/agent-types"
 
 export function SettingsDialog() {
@@ -37,7 +38,7 @@ export function SettingsDialog() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-llm-config": btoa(JSON.stringify(local)),
+          ...buildLlmHeaders(local),
         },
         body: JSON.stringify({
           messages: [{ role: "user", content: "Say 'OK' if you can hear me." }],

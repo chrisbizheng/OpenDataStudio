@@ -12,7 +12,7 @@ interface HistoryPanelProps {
 }
 
 export function HistoryPanel({ items, onSelect, onClear, emptyLabel }: HistoryPanelProps) {
-  const { _t } = useLang()
+  const { _t, lang } = useLang()
   if (items.length === 0) {
     return <div className="text-xs text-muted-foreground p-3">{emptyLabel ?? _t("panel.no_history")}</div>
   }

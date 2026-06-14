@@ -1,115 +1,31 @@
 "use client"
 
-import { useEffect, useCallback, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react"
-import { useShallow } from "zustand/react/shallow"
-import { useDraggable } from "@dnd-kit/core"
+import { useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useDatasetStore } from "@/stores/dataset"
 import { useFieldRoleStore } from "@/stores/field-role"
 import { useLang } from "@/components/lang-provider"
 import { formatRowCount } from "@/lib/format"
-import { fetchDatabases, fetchTables, fetchTableSchema } from "@/lib/api-client"
-import { createFieldRoleKey, getFieldRole, getNextFieldRole, type FieldRole } from "@/lib/field-role"
+import { resolveFieldRole, getNextFieldRole, createFieldRoleKey, type FieldRole } from "@/lib/field-role"
+import { useCatalog } from "@/hooks/use-catalog"
+import { SchemaFieldDraggable } from "./schema-field-draggable"
+import { FieldRoleBadge } from "./field-role-badge"
 
 export function Sidebar() {
   const { _t } = useLang()
   const {
     databases,
-    selectedDatabase,
     tables,
-    selectedTable,
     schema,
+    selectedDatabase,
+    selectedTable,
     isLoading,
     error,
-    setDatabases,
-    setSelectedDatabase,
-    setTables,
-    setSelectedTable,
-    setSchema,
-    setTotalRows,
-    setConnected,
-    setLoading,
-    setError,
     selectDatabase,
-  } = useDatasetStore(useShallow((s) => ({
-    databases: s.databases,
-    selectedDatabase: s.selectedDatabase,
-    tables: s.tables,
-    selectedTable: s.selectedTable,
-    schema: s.schema,
-    isLoading: s.isLoading,
-    error: s.error,
-    setDatabases: s.setDatabases,
-    setSelectedDatabase: s.setSelectedDatabase,
-    setTables: s.setTables,
-    setSelectedTable: s.setSelectedTable,
-    setSchema: s.setSchema,
-    setTotalRows: s.setTotalRows,
-    setConnected: s.setConnected,
-    setLoading: s.setLoading,
-    setError: s.setError,
-    selectDatabase: s.selectDatabase,
-  })))
-
-  const loadTables = useCallback(
-    async (db: string) => {
-      setLoading(true)
-      setError(null)
-      setSelectedTable(null)
-      setSchema([])
-      try {
-        const tableList = await fetchTables(db)
-        const total = tableList.reduce((s, t) => s + t.rowCount, 0)
-        setTables(tableList)
-        setTotalRows(total)
-        setConnected(true)
-      } catch (e) {
-        setConnected(false)
-        setError(
-          e instanceof Error
-            ? e.message
-            : "Failed to connect to ClickHouse"
-        )
-      } finally {
-        setLoading(false)
-      }
-    },
-    [setTables, setTotalRows, setConnected, setLoading, setError, setSelectedTable, setSchema]
-  )
-
-  useEffect(() => {
-    async function init() {
-      try {
-        const dbList = await fetchDatabases()
-        setDatabases(dbList)
-        const db =
-          selectedDatabase || dbList[0]?.name || ""
-        if (db) setSelectedDatabase(db)
-      } catch {
-        // databases unavailable
-      }
-    }
-    init()
-  }, [])
-
-  useEffect(() => {
-    if (selectedDatabase) {
-      loadTables(selectedDatabase)
-    }
-  }, [selectedDatabase, loadTables])
-
-  async function handleSelectTable(name: string) {
-    setSelectedTable(name)
-    try {
-      const columns = await fetchTableSchema(name, selectedDatabase ?? undefined)
-      setSchema(columns)
-    } catch {
-      setSchema([])
-    }
-  }
+    selectTable,
+  } = useCatalog()
 
   const tableMeta = tables.find((t) => t.name === selectedTable)
   const roleOverrides = useFieldRoleStore((s) => s.overrides)
@@ -152,7 +68,7 @@ export function Sidebar() {
         </h2>
       </div>
       <ScrollArea className="flex-1 min-h-0">
-        {isLoading ? (
+        {isLoading && tables.length === 0 ? (
           <div className="p-3 space-y-2">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-8 w-full" />
@@ -175,7 +91,7 @@ export function Sidebar() {
                     }
                     size="sm"
                     className="w-full flex-col items-start text-xs font-normal h-auto min-h-8 py-1.5 px-2 pointer-events-auto"
-                    onClick={() => handleSelectTable(table.name)}
+                    onClick={() => selectTable(table.name)}
                   >
                     <div className="w-full flex items-center gap-1">
                       <span className="truncate">{table.name}</span>
@@ -243,15 +159,18 @@ export function Sidebar() {
             <ScrollArea className="flex-1 min-h-0">
               <div className="px-1 py-0.5 space-y-0.5">
                 {schema.map((col) => {
-                  const key = selectedDatabase && selectedTable
+                  const resolvedRole = resolveFieldRole(
+                    col.name, schema, roleOverrides,
+                    selectedDatabase ?? "", selectedTable ?? ""
+                  )
+                  const fieldKey = selectedDatabase && selectedTable
                     ? createFieldRoleKey(selectedDatabase, selectedTable, col.name)
                     : ""
-                  const resolvedRole = getFieldRole(col.type, key ? roleOverrides[key] : undefined)
                   return (
                     <Tooltip key={col.name}>
                       <TooltipTrigger className="block w-full" render={<span />}>
                         <SchemaFieldDraggable
-                          id={`schema:${key}`}
+                          id={`schema:${fieldKey}`}
                           field={col.name}
                           role={resolvedRole?.role ?? null}
                           disabled={!resolvedRole}
@@ -347,82 +266,5 @@ export function Sidebar() {
         </>
       )}
     </div>
-  )
-}
-
-function SchemaFieldDraggable({
-  id,
-  field,
-  role,
-  disabled,
-  label,
-  children,
-}: {
-  id: string
-  field: string
-  role: FieldRole | null
-  disabled: boolean
-  label: string
-  children: ReactNode
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id,
-    disabled,
-    data: { source: "schema", field, role },
-  })
-
-  return (
-    <div
-      ref={setNodeRef}
-      className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded hover:bg-muted/50 pointer-events-auto"
-      {...attributes}
-      {...listeners}
-      role="button"
-      aria-label={label}
-      aria-grabbed={isDragging}
-    >
-      {children}
-    </div>
-  )
-}
-
-function FieldRoleBadge({
-  role,
-  defaultRole,
-  isOverridden,
-  onToggle,
-  onOpenMenu,
-  label,
-}: {
-  role: FieldRole | null
-  defaultRole: FieldRole | null
-  isOverridden: boolean
-  onToggle: (event: ReactMouseEvent<HTMLButtonElement>) => void
-  onOpenMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
-  label: (key: string) => string
-}) {
-  const text = role === "dimension" ? "D" : role === "indicator" ? "I" : "—"
-  const roleLabel = role ? label(`field.role.${role}`) : label("field.role.unmarkable")
-  const defaultLabel = defaultRole ? label(`field.role.${defaultRole}`) : label("field.role.unmarkable")
-  const className = role
-    ? isOverridden
-      ? role === "dimension"
-        ? "border-blue-500/50 bg-blue-500/10 text-blue-600"
-        : "border-orange-500/50 bg-orange-500/10 text-orange-600"
-      : "border-transparent bg-muted text-muted-foreground"
-    : "border-transparent text-muted-foreground/40"
-
-  return (
-    <button
-      type="button"
-      disabled={!role}
-      aria-label={`${label("field.role.current")}：${roleLabel}`}
-      title={`${label("field.role.current")}：${roleLabel} · ${label("field.role.default")}：${defaultLabel}${isOverridden ? ` · ${label("field.role.overridden")}` : ""}`}
-      onClick={onToggle}
-      onContextMenu={onOpenMenu}
-      className={`h-4 min-w-4 rounded border px-1 text-[9px] leading-3 shrink-0 ${className}`}
-    >
-      {text}
-    </button>
   )
 }

@@ -1,4 +1,5 @@
 import { isDimensionType, isIndicatorType } from "./column-utils"
+import type { ColumnMeta } from "./types"
 
 export type FieldRole = "dimension" | "indicator"
 
@@ -48,4 +49,18 @@ export function getFieldRole(
     defaultRole,
     isOverridden: Boolean(override),
   }
+}
+
+export function resolveFieldRole(
+  field: string,
+  schema: ColumnMeta[],
+  overrides: Record<string, FieldRole>,
+  database: string,
+  table: string
+): ResolvedFieldRole | null {
+  const meta = schema.find((s) => s.name === field)
+  if (!meta) return null
+  const key = createFieldRoleKey(database, table, field)
+  const override = overrides[key]
+  return getFieldRole(meta.type, override)
 }

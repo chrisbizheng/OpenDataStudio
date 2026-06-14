@@ -1,4 +1,4 @@
-export function downloadFile(filename: string, content: string, mime: string) {
+function downloadFile(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
@@ -10,7 +10,7 @@ export function downloadFile(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url)
 }
 
-export function toCsv(columns: string[], rows: unknown[][]): string {
+function toCsv(columns: string[], rows: unknown[][]): string {
   const header = columns.join(",")
   const body = rows
     .map((r) =>
@@ -25,7 +25,7 @@ export function toCsv(columns: string[], rows: unknown[][]): string {
   return `${header}\n${body}`
 }
 
-export function toJson(columns: string[], rows: unknown[][]): string {
+function toJson(columns: string[], rows: unknown[][]): string {
   return JSON.stringify(
     rows.map((r) => Object.fromEntries(columns.map((c, i) => [c, r[i]]))),
     null,

@@ -1,12 +1,15 @@
+import { escapeField, validateDirection, escapeValue } from "./sql-utils"
+
 export function buildSelectSql(
   database: string,
   table: string,
   options?: { orderBy?: string; direction?: "ASC" | "DESC"; limit?: number }
 ): string {
-  const qualified = `\`${database}\`.\`${table}\``
+  const qualified = `${escapeField(database)}.${escapeField(table)}`
   const limit = options?.limit ?? 1000
   if (options?.orderBy && options?.direction) {
-    return `SELECT * FROM ${qualified} ORDER BY ${options.orderBy} ${options.direction} LIMIT ${limit}`
+    const dir = validateDirection(options.direction)
+    return `SELECT * FROM ${qualified} ORDER BY ${escapeField(options.orderBy)} ${dir} LIMIT ${limit}`
   }
   return `SELECT * FROM ${qualified} LIMIT ${limit}`
 }
@@ -17,9 +20,9 @@ export function buildDrilldownSql(
   dimensionValues: Record<string, unknown>,
   limit = 10000
 ): string {
-  const qualified = `\`${database}\`.\`${table}\``
+  const qualified = `${escapeField(database)}.${escapeField(table)}`
   const conditions = Object.entries(dimensionValues)
-    .map(([k, v]) => `\`${k}\` = '${String(v).replace(/'/g, "''")}'`)
+    .map(([k, v]) => `${escapeField(k)} = ${escapeValue(v)}`)
     .join(" AND ")
   return `SELECT * FROM ${qualified}${conditions ? ` WHERE ${conditions}` : ""} LIMIT ${limit}`
 }

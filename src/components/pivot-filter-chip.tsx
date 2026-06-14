@@ -4,8 +4,8 @@ import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/components/lang-provider"
-import { executeQuery } from "@/lib/api-client"
-import { buildDistinctFilterValuesSQL, toggleFilterValue } from "@/lib/pivot-filter-values"
+import { useData } from "@/components/data-provider"
+import { buildDistinctFilterValuesSQL, toggleFilterValue } from "@/lib/pivot-sql"
 import type { FilterRule } from "@/lib/pivot-sql"
 import type { FieldRole } from "@/lib/field-role"
 
@@ -29,6 +29,7 @@ export function PivotFilterChip({
   onRemove,
 }: PivotFilterChipProps) {
   const { _t } = useLang()
+  const { queryEngine } = useData()
   const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<unknown[]>([])
   const [loading, setLoading] = useState(false)
@@ -41,11 +42,11 @@ export function PivotFilterChip({
     setOpen(nextOpen)
     if (!nextOpen || isRange || options.length > 0 || loading) return
     setLoading(true)
-    executeQuery(
+    queryEngine.execute(
       buildDistinctFilterValuesSQL(database, tableName, filter.field),
       database
     )
-      .then((result) => setOptions(result.rows.map((row) => row[0])))
+      .then((result) => result && setOptions(result.rows.map((row) => row[0])))
       .catch(() => setOptions([]))
       .finally(() => setLoading(false))
   }

@@ -5,10 +5,10 @@ import * as VTable from "@visactor/vtable"
 import { useTheme } from "@/components/theme-provider"
 import { getVTableTheme } from "@/lib/vtable-theme"
 import { LARGE_PIVOT_WARNING_THRESHOLD, type PivotConfig } from "@/lib/pivot-sql"
-import type { ColumnMeta } from "@/lib/clickhouse"
+import type { ColumnMeta } from "@/lib/types"
 import { useLang } from "@/components/lang-provider"
 import { SearchBar } from "@/components/search-bar"
-import { buildPivotRecords, filterAndSortPivotData } from "@/lib/pivot-client-data"
+import { buildPivotRecords, filterAndSortPivotData } from "@/lib/pivot-client-utils"
 
 interface PivotGridProps {
   config: PivotConfig

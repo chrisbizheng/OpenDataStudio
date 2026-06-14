@@ -2,12 +2,12 @@
 
 import { useState, useMemo, useCallback, type ReactNode } from "react"
 import { useDroppable } from "@dnd-kit/core"
-import { usePivotStore } from "@/stores/pivot"
+import { usePivotStore, validatePivotExecution, buildPivotConfig } from "@/stores/pivot"
 import { usePivotHistoryStore } from "@/stores/pivot-history"
 import { useDatasetStore } from "@/stores/dataset"
-import { useFieldRoleStore } from "@/stores/field-role"
 import { useLang } from "@/components/lang-provider"
-import { shortType, isDimensionType, isIndicatorType } from "@/lib/column-utils"
+import { shortType, isDimensionType } from "@/lib/column-utils"
+import { astToSummary } from "@/lib/expression"
 import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
 import { IndicatorFormatDialog } from "./indicator-format-dialog"
 import { PivotFilterChip } from "./pivot-filter-chip"
@@ -15,10 +15,11 @@ import { HistoryPanel } from "./history-panel"
 import { SnakeSpinner } from "@/components/snake-spinner"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createFieldRoleKey, getFieldRole } from "@/lib/field-role"
 import { toPivotHistoryItem } from "@/lib/history-items"
-import { buildNextPivotIndicator, buildPivotIndicatorTitle } from "@/lib/pivot-indicator"
-import type { ColumnMeta } from "@/lib/clickhouse"
+import { buildPivotIndicatorTitle, generatePivotSQL } from "@/lib/pivot-sql"
+import { usePivotOrchestrator } from "@/hooks/use-pivot-orchestrator"
+import { useData } from "@/components/data-provider"
+import type { ColumnMeta } from "@/lib/types"
 import type { PivotIndicator, CalculatedIndicator, FilterRule } from "@/lib/pivot-sql"
 
 interface PivotConfigPanelProps {
@@ -57,7 +58,8 @@ export function PivotConfigPanel({
   onExecute,
   onViewSql,
 }: PivotConfigPanelProps) {
-  const { _t } = useLang()
+  const { _t, lang } = useLang()
+  const { queryEngine } = useData()
   const [showCalcDialog, setShowCalcDialog] = useState(false)
   const [editingCalc, setEditingCalc] = useState<CalculatedIndicator | undefined>()
   const [formatIndicatorKey, setFormatIndicatorKey] = useState<string | undefined>()
@@ -71,25 +73,27 @@ export function PivotConfigPanel({
     calculatedIndicators,
     filters,
     isExecuting,
-    error,
-    addRow,
     removeRow,
-    addColumn,
     removeColumn,
-    addIndicator,
     removeIndicator,
     updateIndicator,
-    addFilter,
     updateFilter,
     removeFilter,
     removeCalculatedIndicator,
-    executePivot,
+    setExecuting,
+    setError,
+    setResultData,
+    setLastSQL,
+    updateCalculatedIndicator,
+    addCalculatedIndicator,
+    loadConfig,
   } = usePivotStore()
 
   const { entries: historyEntries, addEntry, clear: clearHistory } = usePivotHistoryStore()
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
-  const roleOverrides = useFieldRoleStore((s) => s.overrides)
   const dbEntries = historyEntries.filter((e) => e.database === selectedDatabase)
+
+  const { getResolvedRole, addFieldAsFilter, addFieldAsIndicator, addRow, addColumn, addIndicator } = usePivotOrchestrator(schema, tableName, database)
 
   const dimensionCandidates = useMemo(
     () => schema.filter((c) => isDimensionType(c.type)),
@@ -97,46 +101,13 @@ export function PivotConfigPanel({
   )
 
   const indicatorCandidates = useMemo(
-    () => schema.filter((c) => isIndicatorType(c.type)),
+    () => schema,
     [schema]
-  )
-
-  const getResolvedRole = useCallback(
-    (field: string) => {
-      const meta = schema.find((s) => s.name === field)
-      if (!meta || !selectedDatabase) return null
-      const override = roleOverrides[createFieldRoleKey(selectedDatabase, tableName, field)]
-      return getFieldRole(meta.type, override)
-    },
-    [schema, selectedDatabase, tableName, roleOverrides]
   )
 
   const usedRowFields = new Set(rows)
   const usedColFields = new Set(columns)
   const formatIndicator = indicators.find((indicator) => indicator.key === formatIndicatorKey)
-
-  const handleAddFilter = useCallback(
-    (field: string) => {
-      const resolved = getResolvedRole(field)
-      const meta = schema.find((s) => s.name === field)
-      if (!resolved || !meta) return
-      const isRange = resolved.role === "indicator" || /^Date/.test(meta.type.replace(/^Nullable\((.+)\)$/, "$1"))
-      addFilter({
-        field,
-        op: isRange ? "BETWEEN" : "IN",
-        value: isRange ? ["", ""] : [],
-      })
-    },
-    [addFilter, getResolvedRole, schema]
-  )
-
-  const handleAddIndicator = useCallback(
-    (field: string) => {
-      const meta = schema.find((s) => s.name === field)
-      addIndicator(buildNextPivotIndicator(field, meta?.comment || field, indicators))
-    },
-    [schema, addIndicator, indicators]
-  )
 
   const commitIndicatorTitle = useCallback(
     (key: string) => {
@@ -153,30 +124,76 @@ export function PivotConfigPanel({
   )
 
   const handleExecute = useCallback(async () => {
-    await executePivot(tableName, database)
     const state = usePivotStore.getState()
-    if (state.resultData) {
-      addEntry({
-        tableName,
-        database,
-        config: {
-          rows: state.rows,
-          columns: state.columns,
-          indicators: state.indicators,
-          calculatedIndicators: state.calculatedIndicators,
-          filters: state.filters,
-          sort: state.sort ?? undefined,
-          totals: state.totals,
-        },
-        rowCount: state.resultData.rows.length,
-      })
-      onExecute()
+    const validationError = validatePivotExecution(state, tableName, database)
+    if (validationError) {
+      setError(validationError)
+      return
     }
-  }, [executePivot, tableName, database, addEntry, onExecute])
+
+    setExecuting(true)
+    setError(null)
+
+    const config = buildPivotConfig(state)
+    const sql = generatePivotSQL(config, tableName, database)
+
+    try {
+      const json = await queryEngine.execute(sql, database)
+      if (!json) return
+      setResultData({ columns: json.columns, rows: json.rows })
+      setExecuting(false)
+      setLastSQL(sql)
+
+      const updatedState = usePivotStore.getState()
+      if (updatedState.resultData) {
+        addEntry({
+          tableName,
+          database,
+          config: {
+            rows: updatedState.rows,
+            columns: updatedState.columns,
+            indicators: updatedState.indicators,
+            calculatedIndicators: updatedState.calculatedIndicators,
+            filters: updatedState.filters,
+            sort: updatedState.sort ?? undefined,
+            totals: updatedState.totals,
+          },
+          sql: updatedState.lastSQL ?? "",
+          rowCount: updatedState.resultData.rows.length,
+        })
+        onExecute()
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "网络错误")
+      setExecuting(false)
+      setLastSQL(sql)
+    }
+  }, [tableName, database, addEntry, onExecute, queryEngine, setExecuting, setError, setResultData, setLastSQL])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="p-2 space-y-2 flex flex-col min-h-0 flex-1">
+      {/* Top toolbar */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
+        <Button
+          size="sm"
+          className="h-6 text-xs px-2"
+          onClick={handleExecute}
+          disabled={isExecuting}
+        >
+          {isExecuting ? (
+            <SnakeSpinner size={14} />
+          ) : _t("pivot.execute")}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 text-xs px-2"
+          onClick={onViewSql}
+        >
+          {_t("pivot.view_sql")}
+        </Button>
+      </div>
+      <div className="p-2 space-y-2 flex flex-col min-h-0 flex-1 overflow-auto">
         {/* Filters */}
         <Section title={_t("pivot.filters")} count={filters.length}>
           <DroppableZone id="filters">
@@ -197,7 +214,7 @@ export function PivotConfigPanel({
                 />
               )
             })}
-            <Select onValueChange={(v: string | null) => v && handleAddFilter(v)}>
+            <Select onValueChange={(v: string | null) => v && addFieldAsFilter(v)}>
               <SelectTrigger className="h-6 w-auto justify-center rounded border-none p-0 px-1 text-[10px] text-muted-foreground shadow-none transition-colors hover:bg-muted hover:text-foreground [&_svg]:hidden *:data-[slot=select-value]:flex-none">
                 <SelectValue placeholder="+添加筛选字段" />
               </SelectTrigger>
@@ -279,7 +296,7 @@ export function PivotConfigPanel({
                     }
                   }}
                   className="min-w-0 flex-1 rounded-sm bg-transparent px-1 py-0.5 text-[10px] font-medium outline-none transition-[font-size] focus:bg-background/70 focus:text-xs"
-                  title={ind.field}
+                  title={ind.comment || ind.field}
                 />
                 <button
                   type="button"
@@ -294,10 +311,9 @@ export function PivotConfigPanel({
                   value={ind.aggregation}
                   onValueChange={(v: string | null) => {
                     if (!v) return
-                    updateIndicator(ind.key, { aggregation: v as PivotIndicator["aggregation"] })
-                    if (ind.title === buildPivotIndicatorTitle(ind.field, ind.aggregation)) {
-                      updateIndicator(ind.key, { title: buildPivotIndicatorTitle(ind.field, v as PivotIndicator["aggregation"]) })
-                    }
+                    const newAgg = v as PivotIndicator["aggregation"]
+                    const newKey = buildPivotIndicatorTitle(ind.field, newAgg)
+                    updateIndicator(ind.key, { aggregation: newAgg, key: newKey, title: newKey })
                   }}
                 >
                   <SelectTrigger className="h-6 w-12 shrink-0 border-0 bg-background/70 px-1 text-[9px] text-foreground shadow-none" title={AGGREGATION_OPTIONS.find((option) => option.value === ind.aggregation)?.label}>
@@ -323,7 +339,7 @@ export function PivotConfigPanel({
               value={indicatorSelectValue}
               onValueChange={(v: string | null) => {
                 if (!v) return
-                handleAddIndicator(v)
+                addFieldAsIndicator(v)
                 setIndicatorSelectValue("")
               }}
             >
@@ -352,8 +368,8 @@ export function PivotConfigPanel({
               >
                 <div className="min-w-0 flex-1 px-1">
                   <div className="truncate text-[10px] font-medium">{calc.title}</div>
-                  <div className="truncate text-[9px] text-muted-foreground" title={calc.expression}>
-                    {calc.expression}
+                  <div className="truncate text-[9px] text-muted-foreground" title={JSON.stringify(calc.logic)}>
+                    {astToSummary(calc.logic)}
                   </div>
                 </div>
                 <span className="shrink-0 rounded bg-background/70 px-1.5 py-0.5 text-[9px] text-muted-foreground">
@@ -389,35 +405,6 @@ export function PivotConfigPanel({
           </div>
         </Section>
 
-        {/* Error */}
-        {error && (
-          <div className="text-xs text-destructive p-1.5 rounded bg-destructive/10">
-            {error}
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-1 pt-1">
-          <Button
-            size="sm"
-            className="flex-1 h-7 text-xs"
-            onClick={handleExecute}
-            disabled={isExecuting}
-          >
-            {isExecuting ? (
-              <SnakeSpinner size={14} />
-            ) : _t("pivot.execute")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={onViewSql}
-          >
-            {_t("pivot.view_sql")}
-          </Button>
-        </div>
-
         <div className="flex flex-col flex-1 min-h-0 border-t border-border">
           <div className="flex border-b border-border shrink-0">
             <div className="flex-1 text-[10px] font-medium py-1.5 px-2 text-foreground border-b-2 border-foreground">
@@ -426,15 +413,15 @@ export function PivotConfigPanel({
           </div>
           <div className="flex-1 overflow-auto">
             <HistoryPanel
-              items={dbEntries.map(toPivotHistoryItem)}
+              items={dbEntries.map((e) => toPivotHistoryItem(e, lang))}
               emptyLabel={_t("panel.no_history")}
               onClear={clearHistory}
               onSelect={(item) => {
                 const entry = dbEntries.find((history) => history.id === item.id)
                 if (!entry) return
-                usePivotStore.getState().loadConfig(entry.config)
+                loadConfig(entry.config)
                 if (entry.tableName) {
-                  useDatasetStore.getState().setSelectedTable(entry.tableName)
+                  useDatasetStore.getState().selectTable(entry.tableName)
                 }
               }}
             />
@@ -443,16 +430,20 @@ export function PivotConfigPanel({
       </div>
 
       <CalculatedIndicatorDialog
+        key={editingCalc?.key ?? "new-calculated-indicator"}
         open={showCalcDialog}
         onOpenChange={setShowCalcDialog}
         existing={editingCalc}
         availableIndicators={indicators}
         existingCalculated={calculatedIndicators}
+        schema={schema}
+        tableName={tableName}
+        database={database}
         onSave={(calc) => {
           if (editingCalc) {
-            usePivotStore.getState().updateCalculatedIndicator(editingCalc.key, calc)
+            updateCalculatedIndicator(editingCalc.key, calc)
           } else {
-            usePivotStore.getState().addCalculatedIndicator(calc)
+            addCalculatedIndicator(calc)
           }
         }}
       />

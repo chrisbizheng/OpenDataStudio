@@ -1,23 +1,6 @@
 import { createClient } from "@clickhouse/client"
-
-export interface TableMeta {
-  name: string
-  rowCount: number
-  engine: string
-  comment?: string
-}
-
-export interface ColumnMeta {
-  name: string
-  type: string
-  comment?: string
-}
-
-export interface QueryResult {
-  columns: string[]
-  rows: unknown[][]
-  stats: { elapsed: number; rowsRead: number; bytesRead: number }
-}
+export type { TableMeta, ColumnMeta, QueryResult } from "./types"
+import type { TableMeta, ColumnMeta, QueryResult } from "./types"
 
 let client: ReturnType<typeof createClient> | null = null
 
@@ -37,6 +20,29 @@ function getClient() {
     })
   }
   return client
+}
+
+const READ_ONLY_PREFIXES = ["SELECT", "SHOW", "DESCRIBE", "EXPLAIN", "WITH"]
+
+export function isReadOnlySql(sql: string): boolean {
+  const trimmed = sql.trim().toUpperCase()
+  return READ_ONLY_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+}
+
+export async function executeReadOnly(
+  sql: string,
+  database?: string
+): Promise<QueryResult> {
+  const singleSql = sql
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s && !s.startsWith("--"))[0] || sql
+
+  if (!isReadOnlySql(singleSql)) {
+    throw new Error("Only SELECT, SHOW, DESCRIBE, EXPLAIN, and WITH statements are allowed")
+  }
+
+  return query(singleSql, undefined, database)
 }
 
 export async function getDatabases(): Promise<{ name: string; comment: string }[]> {
@@ -117,20 +123,4 @@ export async function query(
       bytesRead: 0,
     },
   }
-}
-
-export async function getTotalRowCount(database?: string): Promise<number> {
-  const c = getClient()
-  const db = database || process.env.CLICKHOUSE_DB || "default"
-  const result = await c.query({
-    query: `
-      SELECT sum(total_rows) AS total
-      FROM system.tables
-      WHERE database = {db:String}
-    `,
-    format: "JSONEachRow",
-    query_params: { db },
-  })
-  const rows = (await result.json()) as { total: number }[]
-  return rows[0]?.total ?? 0
 }

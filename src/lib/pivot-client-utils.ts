@@ -1,3 +1,5 @@
+import { matchRow } from "./grid-filter"
+
 export interface PivotClientData {
   columns: string[]
   rows: unknown[][]
@@ -17,10 +19,7 @@ export function filterAndSortPivotData(
   const cols = data.columns
 
   if (searchQuery.trim()) {
-    const q = searchQuery.toLowerCase()
-    rows = rows.filter((row) =>
-      row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
-    )
+    rows = rows.filter((row) => matchRow(row, searchQuery))
   }
 
   if (sortColumn && sortDir) {

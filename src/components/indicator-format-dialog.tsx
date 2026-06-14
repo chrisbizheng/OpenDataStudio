@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { IndicatorFormat, PivotIndicator } from "@/lib/pivot-sql"
+import { useLang } from "@/components/lang-provider"
 
 interface IndicatorFormatDialogProps {
   open: boolean
@@ -15,18 +16,18 @@ interface IndicatorFormatDialogProps {
   onSave: (format: IndicatorFormat, decimals: number) => void
 }
 
-const FORMAT_OPTIONS: { value: IndicatorFormat; label: string }[] = [
-  { value: "number", label: "数字" },
-  { value: "percent", label: "百分比" },
-  { value: "currency", label: "货币" },
-]
-
 export function IndicatorFormatDialog({
   open,
   onOpenChange,
   indicator,
   onSave,
 }: IndicatorFormatDialogProps) {
+  const { _t } = useLang()
+  const FORMAT_OPTIONS: { value: IndicatorFormat; label: string }[] = [
+    { value: "number", label: _t("calc_ind.format_number") },
+    { value: "percent", label: _t("calc_ind.format_percent") },
+    { value: "currency", label: _t("calc_ind.format_currency") },
+  ]
   const [format, setFormat] = useState<IndicatorFormat>(indicator?.format ?? "number")
   const [decimals, setDecimals] = useState(indicator?.decimals ?? 2)
 
@@ -34,19 +35,19 @@ export function IndicatorFormatDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xs">
         <DialogHeader>
-          <DialogTitle className="text-sm">格式设置</DialogTitle>
+          <DialogTitle className="text-sm">{_t("ind_fmt.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
           <div>
-            <Label className="text-xs">指标</Label>
+            <Label className="text-xs">{_t("ind_fmt.indicator")}</Label>
             <div className="mt-1 truncate rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
               {indicator?.title}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs">展示格式</Label>
+              <Label className="text-xs">{_t("ind_fmt.display_format")}</Label>
               <Select value={format} onValueChange={(value) => value && setFormat(value as IndicatorFormat)}>
                 <SelectTrigger className="mt-1 h-8 text-xs">
                   <SelectValue />
@@ -61,7 +62,7 @@ export function IndicatorFormatDialog({
               </Select>
             </div>
             <div>
-              <Label className="text-xs">小数位</Label>
+              <Label className="text-xs">{_t("ind_fmt.decimals")}</Label>
               <Input
                 type="number"
                 min={0}
@@ -76,7 +77,7 @@ export function IndicatorFormatDialog({
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            取消
+            {_t("pivot.cancel")}
           </Button>
           <Button
             size="sm"
@@ -85,7 +86,7 @@ export function IndicatorFormatDialog({
               onOpenChange(false)
             }}
           >
-            保存
+            {_t("pivot.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

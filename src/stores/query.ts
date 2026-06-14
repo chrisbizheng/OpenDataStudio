@@ -1,8 +1,5 @@
 import { create } from "zustand"
-import { executeQuery } from "@/lib/api-client"
-import { buildNextResultWindowSql, inferStableOrder } from "@/lib/stable-result-order"
-
-import type { ColumnMeta } from "@/lib/clickhouse"
+import type { ColumnMeta } from "@/lib/types"
 
 export interface TableData {
   columns: string[]
@@ -31,19 +28,10 @@ interface QueryState {
   setError: (error: string | null) => void
   setSort: (sort: SortState) => void
   setSearchQuery: (query: string) => void
-  loadMore: () => Promise<void>
-  executeQuery: (sql: string, tableName: string, append?: boolean) => Promise<void>
+  setLoadedRows: (n: number) => void
 }
 
-let abortController: AbortController | null = null
-
-function createAbortController(): AbortController {
-  if (abortController) abortController.abort()
-  abortController = new AbortController()
-  return abortController
-}
-
-export const useQueryStore = create<QueryState>((set, get) => ({
+export const useQueryStore = create<QueryState>((set) => ({
   currentTable: null,
   currentSchema: [],
   data: null,
@@ -59,50 +47,7 @@ export const useQueryStore = create<QueryState>((set, get) => ({
   setError: (error) => set({ error }),
   setSort: (sort) => set({ sort }),
   setSearchQuery: (query) => set({ searchQuery: query }),
-  loadMore: async () => {
-    const { currentTable, loadedRows, executeQuery } = get()
-    if (!currentTable) return
-    const db = currentTable.split(".")[0] || ""
-    const table = currentTable.split(".")[1] || currentTable
-    const stableOrder = inferStableOrder(get().currentSchema)
-    const sql = buildNextResultWindowSql(db, table, stableOrder, loadedRows)
-    await executeQuery(sql, currentTable, true)
-  },
-  executeQuery: async (sql, tableName, append = false) => {
-    const controller = createAbortController()
-
-    if (!append) {
-      set({ isExecuting: true, error: null, currentTable: tableName })
-    } else {
-      set({ isExecuting: true, error: null })
-    }
-    try {
-      const json = await executeQuery(sql, undefined, controller.signal)
-      const newRows = json.rows as unknown[][]
-      if (append && get().data) {
-        const state = get()
-        const merged = [...(state.data?.rows ?? []), ...newRows]
-        set({
-          data: { ...state.data!, rows: merged },
-          loadedRows: merged.length,
-          isExecuting: false,
-        })
-      } else {
-        set({
-          data: json,
-          loadedRows: json.rows.length,
-          isExecuting: false,
-          error: null,
-        })
-      }
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return
-      set({
-        error: e instanceof Error ? e.message : "Network error",
-        isExecuting: false,
-      })
-    }
-  },
+  setLoadedRows: (n) => set({ loadedRows: n }),
 }))
 
 export function getFilteredRows(
@@ -110,8 +55,8 @@ export function getFilteredRows(
   searchQuery: string
 ): unknown[][] {
   if (!searchQuery.trim()) return rows
-  const q = searchQuery.toLowerCase()
-  return rows.filter((row) =>
-    row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
-  )
+  return rows.filter((row) => {
+    const q = searchQuery.toLowerCase()
+    return row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
+  })
 }

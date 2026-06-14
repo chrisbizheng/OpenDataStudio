@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildPivotRecords, filterAndSortPivotData } from "../pivot-client-data"
+import { buildPivotRecords, filterAndSortPivotData } from "../pivot-client-utils"
 
 describe("filterAndSortPivotData", () => {
   it("无搜索和排序时保留原始数据引用，避免不必要复制", () => {

@@ -1,0 +1,449 @@
+import type { EChartsOption } from "echarts"
+import type { SeriesConfig } from "@/lib/agent-types"
+import { COLORS, resolveType, formatNum, isSequentialData } from "./chart-data"
+
+export interface ChartConfig {
+  type: string
+  xKey: string
+  yKey?: string
+  series?: SeriesConfig[]
+  title?: string
+  showLegend?: boolean
+  height?: number
+}
+
+interface BarSeries {
+  type: "bar"
+  name?: string
+  emphasis?: { focus?: string }
+  data: number[] | { value: number; name: string; itemStyle: { color: string } }[]
+  itemStyle: {
+    color?: string | ((params: { dataIndex: number }) => string)
+    borderRadius: [number, number, number, number]
+  }
+  barMaxWidth?: number
+  coordinateSystem?: "polar"
+  roundCap?: boolean
+}
+
+interface LineSeries {
+  type: "line"
+  name?: string
+  emphasis?: { focus?: string }
+  data: number[] | [unknown, number][]
+  smooth?: boolean
+  lineStyle?: { width: number; color: string }
+  itemStyle?: { color: string }
+  areaStyle?: { opacity: number; color: string }
+}
+
+interface PieSeries {
+  type: "pie"
+  name?: string
+  radius: [string, string]
+  center: [string, string]
+  data: { name: string; value: number }[]
+  label: { formatter: string; fontSize: number }
+  emphasis: { itemStyle: { shadowBlur: number; shadowOffsetX: number; shadowColor: string } }
+}
+
+interface RadarSeries {
+  type: "radar"
+  name?: string
+  data: { value: number[]; name: string; areaStyle: { opacity: number } }[]
+}
+
+interface ScatterSeries {
+  type: "scatter"
+  name?: string
+  emphasis?: { focus?: string }
+  data: [unknown, number][]
+  itemStyle: { color: string }
+  symbolSize: number
+}
+
+interface TreemapSeries {
+  type: "treemap"
+  name?: string
+  data: { name: string; value: number; itemStyle: { color: string } }[]
+  label: { fontSize: number }
+  breadcrumb: { show: boolean }
+}
+
+type ChartSeries = BarSeries | LineSeries | PieSeries | RadarSeries | ScatterSeries | TreemapSeries
+
+function barSeries(data: number[], overrides: Partial<BarSeries> = {}): BarSeries {
+  return {
+    type: "bar",
+    data,
+    emphasis: { focus: "series" },
+    itemStyle: {
+      color: COLORS[0],
+      borderRadius: [2, 2, 0, 0],
+    },
+    barMaxWidth: 40,
+    ...overrides,
+  }
+}
+
+function lineSeries(data: number[], overrides: Partial<LineSeries> = {}): LineSeries {
+  return {
+    type: "line",
+    data,
+    smooth: true,
+    emphasis: { focus: "series" },
+    lineStyle: { width: 2, color: COLORS[0] },
+    itemStyle: { color: COLORS[0] },
+    ...overrides,
+  }
+}
+
+function areaSeries(data: number[], color: string): LineSeries {
+  return {
+    type: "line",
+    data,
+    smooth: true,
+    emphasis: { focus: "series" },
+    lineStyle: { width: 2, color },
+    itemStyle: { color },
+    areaStyle: { opacity: 0.15, color },
+  }
+}
+
+function composedBar(i: number, data: number[], name: string): BarSeries {
+  return {
+    type: "bar",
+    data,
+    name,
+    emphasis: { focus: "series" },
+    itemStyle: { color: COLORS[i % COLORS.length], borderRadius: [2, 2, 0, 0] },
+    barMaxWidth: 30,
+  }
+}
+
+function composedLine(i: number, data: number[], name: string): LineSeries {
+  return {
+    type: "line",
+    data,
+    name,
+    smooth: true,
+    emphasis: { focus: "series" },
+    lineStyle: { width: 2, color: COLORS[i % COLORS.length] },
+    itemStyle: { color: COLORS[i % COLORS.length] },
+  }
+}
+
+function composedArea(i: number, data: number[], name: string): LineSeries {
+  return {
+    type: "line",
+    data,
+    name,
+    smooth: true,
+    emphasis: { focus: "series" },
+    lineStyle: { width: 2, color: COLORS[i % COLORS.length] },
+    itemStyle: { color: COLORS[i % COLORS.length] },
+    areaStyle: { opacity: 0.15, color: COLORS[i % COLORS.length] },
+  }
+}
+
+export function buildTooltip(isDark: boolean): EChartsOption["tooltip"] {
+  return {
+    trigger: "axis",
+    backgroundColor: isDark ? "#1e1e2e" : "#ffffff",
+    borderColor: isDark ? "#333" : "#e5e7eb",
+    textStyle: { color: isDark ? "#e0e0e0" : "#333", fontSize: 11 },
+    confine: true,
+    formatter(params: unknown) {
+      const p = params as { name: string; value: number | number[]; seriesName: string; color: string; marker: string }[]
+      if (!Array.isArray(p) || p.length === 0) return ""
+      const name = p[0].name
+      const total = p.reduce((s, item) => s + (Array.isArray(item.value) ? item.value[item.value.length - 1] : Number(item.value) || 0), 0)
+      const lines = p.map((item) => {
+        const val = Array.isArray(item.value) ? item.value[item.value.length - 1] : Number(item.value) || 0
+        const pct = total > 0 ? ((val / total) * 100).toFixed(1) : "0.0"
+        return `${item.marker} ${item.seriesName}: <b>${formatNum(val)}</b> <span style="color:#999;font-size:10px">(${pct}%)</span>`
+      })
+      return `<div style="font-size:12px"><div style="font-weight:600;margin-bottom:4px;border-bottom:1px solid ${isDark ? "#444" : "#eee"};padding-bottom:4px">${name}</div>${lines.join("<br/>")}</div>`
+    },
+  }
+}
+
+export function buildToolbox(resolvedType: string, hasMultipleSeries: boolean): EChartsOption["toolbox"] {
+  const magicTypes: string[] = []
+  if (["bar", "area"].includes(resolvedType)) magicTypes.push("line")
+  if (["line", "area", "pie"].includes(resolvedType)) magicTypes.push("bar")
+  if (["bar", "line"].includes(resolvedType)) magicTypes.push("pie")
+  if (hasMultipleSeries && ["bar", "line", "area", "composed"].includes(resolvedType)) magicTypes.push("stack")
+  const hasMagicType = magicTypes.length > 0
+
+  return {
+    right: 10,
+    top: 0,
+    feature: {
+      saveAsImage: { title: "Save", pixelRatio: 2 },
+      dataView: { title: "Data", readOnly: true, lang: ["Data View", "Close", "Refresh"] },
+      restore: { title: "Restore" },
+      ...(hasMagicType ? {
+        magicType: {
+          title: Object.fromEntries(magicTypes.map((t) => [t, t.charAt(0).toUpperCase() + t.slice(1)])),
+          type: magicTypes as ("line" | "bar" | "stack")[],
+        }
+      } : {}),
+    },
+    iconStyle: { borderColor: "#999" },
+    emphasis: { iconStyle: { borderColor: "#6366F1" } },
+  }
+}
+
+export function buildDataZoom(): EChartsOption["dataZoom"] {
+  return [
+    { type: "inside", start: 0, end: 100 },
+    { type: "slider", start: 0, end: 100, height: 18, bottom: 2, left: 50, right: 20 },
+  ]
+}
+
+export function buildBrush(xKey: string, data: Record<string, unknown>[], onBrushSelect?: (items: Record<string, unknown>[]) => void): EChartsOption["brush"] {
+  if (!onBrushSelect) return undefined
+  return {
+    toolbox: ["rect", "clear"],
+    xAxisIndex: 0,
+    brushStyle: { borderWidth: 1, color: "rgba(99,102,241,0.15)", borderColor: "rgba(99,102,241,0.6)" },
+    outOfBrush: { colorAlpha: 0.3 },
+    throttleType: "debounce",
+    throttleDelay: 300,
+  }
+}
+
+export function buildSeries(
+  resolvedType: string,
+  chartData: Record<string, unknown>[],
+  config: ChartConfig,
+  xKey: string,
+  barGroups?: string[],
+  isDark?: boolean,
+): ChartSeries[] {
+  const series: SeriesConfig[] = config.series?.length
+    ? config.series
+    : [{ yKey: config.yKey || "", chartType: resolvedType === "composed" ? undefined : resolvedType }]
+
+  if (resolvedType === "pie") {
+    const pieData = chartData.map((d) => ({ name: String(d[xKey] ?? ""), value: Number(d[config.yKey || ""]) || 0 }))
+    return [{
+      type: "pie",
+      radius: ["35%", "65%"],
+      center: ["50%", "50%"],
+      data: pieData,
+      label: { formatter: "{b}: {d}%", fontSize: 10 },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.3)" } },
+    }]
+  }
+
+  if (resolvedType === "radar") {
+    return [{
+      type: "radar",
+      data: [{
+        value: chartData.map((d) => Number(d[config.yKey || ""]) || 0),
+        name: config.yKey || "value",
+        areaStyle: { opacity: 0.15 },
+      }],
+    }]
+  }
+
+  if (resolvedType === "radialBar") {
+    const radialData = chartData.map((d, i) => ({
+      value: Number(d[config.yKey || ""]) || 0,
+      name: String(d[xKey] ?? ""),
+      itemStyle: { color: COLORS[i % COLORS.length] },
+    }))
+    return [{
+      type: "bar",
+      data: radialData.map((d) => d.value),
+      coordinateSystem: "polar",
+      roundCap: true,
+      itemStyle: {
+        color: (p: { dataIndex: number }) => COLORS[p.dataIndex % COLORS.length],
+        borderRadius: [2, 2, 0, 0],
+      },
+    }]
+  }
+
+  if (resolvedType === "treemap") {
+    const tData = chartData.map((d, i) => ({
+      name: String(d[xKey] ?? ""),
+      value: Number(d[config.yKey || ""]) || 0,
+      itemStyle: { color: COLORS[i % COLORS.length] },
+    }))
+    return [{
+      type: "treemap",
+      data: tData,
+      label: { fontSize: 10 },
+      breadcrumb: { show: false },
+    }]
+  }
+
+  if (barGroups && barGroups.length > 0) {
+    return barGroups.map((group, i) =>
+      barSeries(chartData.map((d) => Number(d[group]) || 0), {
+        name: group,
+        itemStyle: {
+          color: COLORS[i % COLORS.length],
+          borderRadius: [2, 2, 0, 0],
+        },
+      })
+    )
+  }
+
+  if (resolvedType === "scatter") {
+    return series.map((s, i) => ({
+      type: "scatter" as const,
+      name: s.label || s.yKey,
+      data: chartData.map((d): [unknown, number] => [d[xKey], Number(d[s.yKey]) || 0]),
+      itemStyle: { color: COLORS[i % COLORS.length] },
+      symbolSize: 8,
+      emphasis: { focus: "series" as const },
+    }))
+  }
+
+  if (resolvedType === "composed") {
+    return series.map((s, i) => {
+      const ct = s.chartType ? resolveType(s.chartType) : (i === 0 ? "bar" : "line")
+      const name = s.label || s.yKey
+      const data = chartData.map((d) => Number(d[s.yKey]) || 0)
+      if (ct === "bar") return composedBar(i, data, name)
+      if (ct === "area") return composedArea(i, data, name)
+      return composedLine(i, data, name)
+    })
+  }
+
+  const yKey = config.yKey || ""
+  const data = chartData.map((d) => Number(d[yKey]) || 0)
+
+  if (resolvedType === "area") return [areaSeries(data, COLORS[0])]
+  if (resolvedType === "line") return [lineSeries(data)]
+  return [barSeries(data)]
+}
+
+export function markMax(
+  option: EChartsOption,
+  maxItem: Record<string, unknown> | null,
+  xKey: string,
+  yKey: string,
+  resolvedType: string,
+) {
+  if (resolvedType === "pie" || resolvedType === "radar" || resolvedType === "radialBar" || resolvedType === "treemap") return
+  if (!Array.isArray(option.series) || option.series.length === 0) return
+
+  const markData = maxItem
+    ? [{ coord: [String(maxItem[xKey] ?? ""), Number(maxItem[yKey]) || 0], symbol: "circle" as const, symbolSize: 10, itemStyle: { color: "#F59E0B", borderColor: "#fff", borderWidth: 2 } }]
+    : []
+
+  const first = option.series[0] as { markPoint?: { data: typeof markData } }
+  first.markPoint = { data: markData }
+}
+
+export function buildEChartsOption(params: {
+  chartData: Record<string, unknown>[]
+  config: ChartConfig
+  resolvedType: string
+  resolvedXKey: string
+  barGroups?: string[]
+  isDark: boolean
+  stats: { max: number; maxItem: Record<string, unknown> | null }
+  yKey: string
+  onBrushSelect?: (items: Record<string, unknown>[]) => void
+}): EChartsOption {
+  const { chartData, config, resolvedType, resolvedXKey, barGroups, isDark, stats, yKey, onBrushSelect } = params
+  if (chartData.length === 0) return {}
+
+  const series = buildSeries(resolvedType, chartData, config, resolvedXKey, barGroups, isDark)
+  const hasMultipleSeries = series.length > 1 || !!barGroups?.length || (config.series?.length ?? 0) > 1
+  const needsXY = !["pie", "radar", "radialBar", "treemap"].includes(resolvedType)
+
+  const opt: EChartsOption = {
+    color: COLORS,
+    tooltip: buildTooltip(isDark),
+    toolbox: buildToolbox(resolvedType, hasMultipleSeries),
+    animation: true,
+    animationDuration: 600,
+    animationEasing: "cubicOut",
+  }
+
+  if (config.title) {
+    opt.title = {
+      text: config.title,
+      left: "center",
+      top: 4,
+      textStyle: { fontSize: 13, fontWeight: 600, color: isDark ? "#e0e0e0" : "#333" },
+    }
+  }
+
+  if (config.showLegend !== false && series.length > 0) {
+    opt.legend = {
+      left: "left",
+      top: config.title ? 24 : 0,
+      icon: "circle",
+      itemWidth: 8,
+      itemHeight: 8,
+      textStyle: { fontSize: 10, color: isDark ? "#ccc" : "#666" },
+    }
+  }
+
+  if (needsXY) {
+    const hasDataZoom = ["bar", "line", "area", "scatter", "composed"].includes(resolvedType) && isSequentialData(chartData, resolvedXKey)
+    const gridBottom = hasDataZoom ? 68 : onBrushSelect ? 60 : 32
+    opt.grid = { left: 50, right: 20, top: config.title ? 52 : 32, bottom: gridBottom, containLabel: false }
+    opt.xAxis = {
+      type: "category",
+      data: chartData.map((d) => String(d[resolvedXKey] ?? "")),
+      axisLabel: { fontSize: 10, color: isDark ? "#aaa" : "#666", rotate: chartData.length > 10 ? 30 : 0 },
+      axisLine: { lineStyle: { color: isDark ? "#444" : "#ddd" } },
+      axisTick: { show: false },
+    }
+    opt.yAxis = {
+      type: "value",
+      axisLabel: { fontSize: 10, color: isDark ? "#aaa" : "#666" },
+      splitLine: { lineStyle: { color: isDark ? "#333" : "#eee" } },
+      axisLine: { show: false },
+    }
+
+    if (["bar", "line", "area", "scatter", "composed"].includes(resolvedType) && isSequentialData(chartData, resolvedXKey)) {
+      opt.dataZoom = buildDataZoom()
+    }
+
+    if (onBrushSelect) {
+      opt.brush = buildBrush(resolvedXKey, chartData, onBrushSelect)
+    }
+  }
+
+  if (resolvedType === "radar") {
+    opt.radar = {
+      indicator: chartData.map((d) => ({ name: String(d[resolvedXKey] ?? "").slice(0, 8) })),
+      shape: "polygon",
+      splitArea: { areaStyle: { color: isDark ? ["#1a1a2e", "#16213e"] : ["#f5f5ff", "#fff"] } },
+      axisLine: { lineStyle: { color: isDark ? "#444" : "#ddd" } },
+      splitLine: { lineStyle: { color: isDark ? "#333" : "#eee" } },
+    }
+  }
+
+  if (resolvedType === "radialBar") {
+    opt.polar = { radius: ["20%", "80%"] }
+    opt.angleAxis = {
+      max: Math.max(...chartData.map((d) => Number(d[yKey]) || 0)) * 1.2,
+      show: false,
+    }
+    opt.radiusAxis = {
+      type: "category",
+      data: chartData.map((d) => String(d[resolvedXKey] ?? "")),
+      axisLabel: { fontSize: 9 },
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  opt.series = series as any
+
+  if (needsXY && yKey) {
+    markMax(opt, stats.maxItem, resolvedXKey, yKey, resolvedType)
+  }
+
+  return opt
+}

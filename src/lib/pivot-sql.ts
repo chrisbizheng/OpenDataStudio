@@ -1,4 +1,7 @@
 import { extractDependencies, toSQL } from "./expression"
+import type { ExpressionNode } from "./ast-types"
+import { escapeField, escapeValue } from "./sql-utils"
+import { isIndicatorType } from "./column-utils"
 
 export type AggregationType =
   | "SUM"
@@ -17,13 +20,13 @@ export interface PivotIndicator {
   aggregation: AggregationType
   format?: IndicatorFormat
   decimals?: number
+  comment?: string
 }
 
 export interface CalculatedIndicator {
   key: string
   title: string
-  expression: string
-  dependIndicatorKeys: string[]
+  logic: ExpressionNode
   format?: IndicatorFormat
   decimals?: number
 }
@@ -57,11 +60,8 @@ export interface PivotConfig {
   limit?: number
 }
 
-function escapeField(name: string): string {
-  return `\`${name.replace(/`/g, "``")}\``
-}
 
-function aggToSQL(agg: AggregationType, field: string): string {
+export function aggToSQL(agg: AggregationType, field: string): string {
   const f = escapeField(field)
   switch (agg) {
     case "SUM":
@@ -94,18 +94,25 @@ function topoSortCalculated(
 ): CalculatedIndicator[] {
   const byKey = new Map(calculated.map((c) => [c.key, c]))
   const visited = new Set<string>()
+  const visiting = new Set<string>()
   const result: CalculatedIndicator[] = []
 
-  function visit(key: string) {
+  function visit(key: string, path: string[] = []) {
     if (visited.has(key)) return
-    visited.add(key)
+    if (visiting.has(key)) {
+      const cycle = [...path, key].join(" → ")
+      throw new Error(`Circular dependency detected: ${cycle}`)
+    }
+    visiting.add(key)
     const calc = byKey.get(key)
     if (!calc) return
-    for (const dep of calc.dependIndicatorKeys) {
+    for (const dep of extractDependencies(calc.logic)) {
       if (byKey.has(dep)) {
-        visit(dep)
+        visit(dep, [...path, key])
       }
     }
+    visiting.delete(key)
+    visited.add(key)
     result.push(calc)
   }
 
@@ -121,17 +128,17 @@ function buildWhereClause(filters?: FilterRule[]): string {
     const field = escapeField(f.field)
     if (f.op === "IN") {
       const vals = Array.isArray(f.value) ? f.value : [f.value]
-      const inList = vals.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(", ")
+      const inList = vals.map((v) => escapeValue(v)).join(", ")
       return `${field} IN (${inList})`
     }
     if (f.op === "LIKE") {
-      return `${field} LIKE '${String(f.value).replace(/'/g, "''")}'`
+      return `${field} LIKE ${escapeValue(f.value)}`
     }
     if (f.op === "BETWEEN") {
       const [from, to] = Array.isArray(f.value) ? f.value : [f.value, f.value]
-      return `${field} BETWEEN '${String(from).replace(/'/g, "''")}' AND '${String(to).replace(/'/g, "''")}'`
+      return `${field} BETWEEN ${escapeValue(from)} AND ${escapeValue(to)}`
     }
-    return `${field} ${f.op} '${String(f.value).replace(/'/g, "''")}'`
+    return `${field} ${f.op} ${escapeValue(f.value)}`
   })
   return `WHERE ${clauses.join(" AND ")}`
 }
@@ -156,7 +163,7 @@ export function generatePivotSQL(
   }
 
   for (const calc of sortedCalculated) {
-    const sqlExpr = toSQL(calc.expression, indicatorSQLMap)
+    const sqlExpr = toSQL(calc.logic, indicatorSQLMap, { useAnyValue: true })
     selectParts.push(`${sqlExpr} AS ${escapeField(calc.key)}`)
   }
 
@@ -175,4 +182,63 @@ export function generatePivotSQL(
   const limit = config.limit ? `LIMIT ${config.limit}` : ""
 
   return [`SELECT\n  ${select}`, from, where, groupBy, orderBy, limit].filter(Boolean).join("\n")
+}
+
+export function buildDistinctFilterValuesSQL(
+  database: string,
+  table: string,
+  field: string
+): string {
+  const f = escapeField(field)
+  return [
+    `SELECT DISTINCT ${f} AS \`value\``,
+    `FROM ${escapeField(database)}.${escapeField(table)}`,
+    `WHERE ${f} IS NOT NULL`,
+    `ORDER BY ${f}`,
+    "LIMIT 200",
+  ].join("\n")
+}
+
+export function toggleFilterValue(values: unknown[], value: unknown): unknown[] {
+  return values.includes(value)
+    ? values.filter((item) => item !== value)
+    : [...values, value]
+}
+
+export const NUMERIC_AGGREGATION_ORDER: AggregationType[] = [
+  "SUM",
+  "AVG",
+  "COUNT",
+  "MIN",
+  "MAX",
+  "DISTINCT_COUNT",
+]
+
+export const NON_NUMERIC_AGGREGATION_ORDER: AggregationType[] = [
+  "COUNT",
+  "DISTINCT_COUNT",
+]
+
+export function buildPivotIndicatorTitle(field: string, aggregation: AggregationType): string {
+  return `${field}-${aggregation}`
+}
+
+export function buildNextPivotIndicator(
+  field: string,
+  comment: string,
+  existing: PivotIndicator[],
+  fieldType?: string
+): PivotIndicator {
+  const isNumeric = fieldType == null || isIndicatorType(fieldType)
+  const aggregationOrder = isNumeric ? NUMERIC_AGGREGATION_ORDER : NON_NUMERIC_AGGREGATION_ORDER
+  const used = new Set(existing.filter((indicator) => indicator.field === field).map((indicator) => indicator.aggregation))
+  const aggregation = aggregationOrder.find((agg) => !used.has(agg)) ?? "COUNT"
+  const title = buildPivotIndicatorTitle(field, aggregation)
+  return {
+    key: title,
+    field,
+    title,
+    aggregation,
+    comment: comment !== field ? comment : undefined,
+  }
 }

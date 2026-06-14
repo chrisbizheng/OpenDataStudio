@@ -1,5 +1,6 @@
 import { unwrapNullable } from "@/lib/column-utils"
-import type { ColumnMeta } from "@/lib/clickhouse"
+import type { ColumnMeta } from "@/lib/types"
+import { escapeField } from "./sql-utils"
 
 export interface StableOrder {
   field: string
@@ -8,10 +9,6 @@ export interface StableOrder {
 
 const TIME_NAME_PATTERN = /^(event_time|timestamp|created_at|date|time)$/i
 const ID_NAME_PATTERN = /(^id$|_id$)/i
-
-function escapeIdent(name: string): string {
-  return `\`${name.replace(/`/g, "``")}\``
-}
 
 export function inferStableOrder(schema: Pick<ColumnMeta, "name" | "type">[]): StableOrder | null {
   const timeField = schema.find((field) => {
@@ -31,7 +28,7 @@ export function buildNextResultWindowSql(
   offset: number,
   limit = 1000
 ): string {
-  const qualified = `${escapeIdent(database)}.${escapeIdent(table)}`
-  const orderBy = stableOrder ? ` ORDER BY ${escapeIdent(stableOrder.field)} ${stableOrder.direction}` : ""
+  const qualified = `${escapeField(database)}.${escapeField(table)}`
+  const orderBy = stableOrder ? ` ORDER BY ${escapeField(stableOrder.field)} ${stableOrder.direction}` : ""
   return `SELECT * FROM ${qualified}${orderBy} LIMIT ${limit} OFFSET ${offset}`
 }
