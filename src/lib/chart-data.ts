@@ -4,6 +4,14 @@ export const COLORS = [
   "#3B82F6", "#84CC16", "#D946EF", "#0EA5E9", "#22C55E",
 ]
 
+export const COLOR_THEMES: Record<string, string[]> = {
+  default: COLORS,
+  warm: ["#F59E0B", "#EF4444", "#F97316", "#E11D48", "#FB923C", "#FBBF24", "#F87171", "#FCA5A5", "#FDE68A", "#FECACA"],
+  cool: ["#6366F1", "#3B82F6", "#06B6D4", "#8B5CF6", "#0EA5E9", "#14B8A6", "#A78BFA", "#38BDF8", "#67E8F9", "#5EEAD4"],
+  pastel: ["#C4B5FD", "#FBCFE8", "#FDE68A", "#A7F3D0", "#FCA5A5", "#DDD6FE", "#A5F3FC", "#FED7AA", "#99F6E4", "#FECDD3"],
+  dark: ["#818CF8", "#F472B6", "#FBBF24", "#34D399", "#F87171", "#A78BFA", "#22D3EE", "#FB923C", "#2DD4BF", "#FB7185"],
+}
+
 const TYPE_MAP: Record<string, string> = {
   bar: "bar", barchart: "bar", column: "bar",
   line: "line", linechart: "line",

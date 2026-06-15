@@ -1,6 +1,6 @@
 import type { EChartsOption } from "echarts"
 import type { SeriesConfig } from "@/lib/agent-types"
-import { COLORS, resolveType, formatNum, isSequentialData } from "./chart-data"
+import { COLORS, COLOR_THEMES, resolveType, formatNum, isSequentialData } from "./chart-data"
 
 export interface ChartConfig {
   type: string
@@ -10,6 +10,34 @@ export interface ChartConfig {
   title?: string
   showLegend?: boolean
   height?: number
+  axis?: {
+    xAxisName?: string
+    xAxisRotate?: number
+    xAxisHide?: boolean
+    yAxisName?: string
+    yAxisUnit?: string
+    yAxisMin?: number
+    yAxisMax?: number
+    yAxisHide?: boolean
+    dualYAxis?: boolean
+  }
+  style?: {
+    barRadius?: number
+    barWidth?: number
+    lineSmooth?: boolean
+    areaFill?: boolean
+    lineMarkPoint?: boolean
+    pieDonut?: boolean
+    pieRadius?: number
+    colorTheme?: string
+  }
+  label?: {
+    showDataLabels?: boolean
+    showTotalLabel?: boolean
+    numberFormat?: string
+    decimalPlaces?: number
+  }
+  jsonOverride?: string
 }
 
 interface BarSeries {
@@ -443,6 +471,125 @@ export function buildEChartsOption(params: {
 
   if (needsXY && yKey) {
     markMax(opt, stats.maxItem, resolvedXKey, yKey, resolvedType)
+  }
+
+  if (config.axis && needsXY) {
+    const ac = config.axis
+    if (opt.xAxis && typeof opt.xAxis === "object" && !Array.isArray(opt.xAxis)) {
+      if (ac.xAxisName) opt.xAxis.name = ac.xAxisName
+      if (ac.xAxisRotate !== undefined) {
+        opt.xAxis.axisLabel = { ...opt.xAxis.axisLabel, rotate: ac.xAxisRotate }
+      }
+      if (ac.xAxisHide) opt.xAxis.show = false
+    }
+    if (opt.yAxis && typeof opt.yAxis === "object" && !Array.isArray(opt.yAxis)) {
+      if (ac.yAxisName) opt.yAxis.name = ac.yAxisName
+      if (ac.yAxisUnit) {
+        opt.yAxis.axisLabel = { ...opt.yAxis.axisLabel, formatter: `{value}${ac.yAxisUnit}` }
+      }
+      if (ac.yAxisMin !== undefined) opt.yAxis.min = ac.yAxisMin
+      if (ac.yAxisMax !== undefined) opt.yAxis.max = ac.yAxisMax
+      if (ac.yAxisHide) opt.yAxis.show = false
+    }
+    if (ac.dualYAxis && resolvedType === "composed" && Array.isArray(opt.series)) {
+      opt.yAxis = [
+        opt.yAxis as object,
+        { type: "value" as const, name: "", position: "right" as const, axisLabel: { fontSize: 10 }, splitLine: { show: false } },
+      ]
+    }
+  }
+
+  if (config.style) {
+    const sc = config.style
+    if (sc.colorTheme && COLOR_THEMES[sc.colorTheme]) {
+      opt.color = COLOR_THEMES[sc.colorTheme]
+    }
+    if (Array.isArray(opt.series)) {
+      for (const s of opt.series) {
+        const si = s as Record<string, unknown>
+        if (si.type === "bar") {
+          if (sc.barRadius !== undefined) {
+            si.itemStyle = { ...(si.itemStyle as object), borderRadius: [sc.barRadius, sc.barRadius, 0, 0] }
+          }
+          if (sc.barWidth !== undefined) {
+            si.barMaxWidth = sc.barWidth
+          }
+        }
+        if (si.type === "line") {
+          if (sc.lineSmooth !== undefined) si.smooth = sc.lineSmooth
+          if (sc.areaFill) si.areaStyle = { opacity: 0.15 }
+          if (sc.lineMarkPoint) {
+            si.markPoint = { data: [{ type: "max", name: "Max" }, { type: "min", name: "Min" }] }
+          }
+        }
+        if (si.type === "pie") {
+          if (sc.pieDonut) {
+            const inner = sc.pieRadius ?? 50
+            si.radius = [`${inner}%`, "70%"]
+          }
+        }
+      }
+    }
+  }
+
+  if (config.label) {
+    const lc = config.label
+    const formatValue = (v: number): string => {
+      let result = v
+      if (lc.decimalPlaces !== undefined) {
+        result = Number(v.toFixed(lc.decimalPlaces))
+      }
+      switch (lc.numberFormat) {
+        case "comma": return result.toLocaleString()
+        case "percent": return `${result}%`
+        case "thousand": return `${(result / 1000).toFixed(lc.decimalPlaces ?? 1)}K`
+        case "million": return `${(result / 1000000).toFixed(lc.decimalPlaces ?? 1)}M`
+        default: return String(result)
+      }
+    }
+
+    if (Array.isArray(opt.series)) {
+      for (const s of opt.series) {
+        const si = s as Record<string, unknown>
+        if (lc.showDataLabels) {
+          const isPie = si.type === "pie"
+          si.label = {
+            ...(si.label as object || {}),
+            show: true,
+            position: isPie ? "outside" : "top",
+            formatter: isPie ? undefined : (params: { value: number }) => formatValue(params.value),
+          }
+        }
+      }
+    }
+
+    if (lc.showTotalLabel && (resolvedType === "bar" || resolvedType === "pie") && Array.isArray(opt.series)) {
+      const total = chartData.reduce((sum, d) => sum + (Number(d[yKey]) || 0), 0)
+      const si = opt.series[0] as Record<string, unknown>
+      if (resolvedType === "bar") {
+        si.markLine = {
+          silent: true,
+          data: [{ yAxis: total / chartData.length, name: "Avg" }],
+          label: { formatter: () => `Avg: ${formatValue(total / chartData.length)}` },
+        }
+      }
+    }
+  }
+
+  if (config.jsonOverride) {
+    try {
+      const override = JSON.parse(config.jsonOverride) as Partial<EChartsOption>
+      for (const key of Object.keys(override)) {
+        const k = key as keyof EChartsOption
+        if (typeof override[k] === "object" && override[k] !== null && !Array.isArray(override[k])) {
+          (opt as Record<string, unknown>)[k] = { ...((opt as Record<string, unknown>)[k] as object || {}), ...(override[k] as object) }
+        } else {
+          (opt as Record<string, unknown>)[k] = override[k]
+        }
+      }
+    } catch {
+      // Silently skip invalid JSON — validated in UI
+    }
   }
 
   return opt

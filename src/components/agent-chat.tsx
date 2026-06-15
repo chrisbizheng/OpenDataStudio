@@ -10,7 +10,13 @@ import { stripMarkdownTables } from "@/lib/markdown-utils"
 import { suggestFollowUp } from "@/lib/suggestions"
 import { suggestDeepDiveDirections, type DeepDiveItem } from "@/lib/deep-dive-directions"
 import { getChartNodeContext } from "@/lib/chart-node-context"
+import { useState } from "react"
+import { LayoutDashboard } from "lucide-react"
+import { useDashboardsStore } from "@/stores/dashboards"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 import type { Message, MessageUIState } from "@/lib/agent-types"
+import { createWidgetFromMessage } from "@/lib/widget-factory"
 
 const MD_CLASS = "text-foreground leading-relaxed text-xs space-y-1.5 [&_p]:my-0 [&_ul]:my-1 [&_ul]:pl-4 [&_ul]:list-disc [&_ol]:my-1 [&_ol]:pl-4 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_strong]:font-semibold [&_strong]:text-foreground [&_em]:italic [&_a]:text-primary [&_a]:underline [&_code]:bg-muted [&_code]:px-1 [&_code]:py-px [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:text-[10px] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_blockquote]:border-l-2 [&_blockquote]:border-muted [&_blockquote]:pl-2 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_hr]:my-2 [&_hr]:border-border"
 
@@ -511,6 +517,7 @@ function AssistantMessage({ msg, index, messagesLength, ui, isLoading, schema, l
     clickedChart, deepDiveOpen, aiDirections, isGeneratingDirections,
     setClickedChart, setDeepDiveOpen, setAiDirections,
   } = useChartDetailStore()
+  const [dashboardDialogOpen, setDashboardDialogOpen] = useState(false)
   const isLast = index === messagesLength - 1
   const showContent = msg.content && msg.content !== "Done." && !(index === 0 && msg.role === "assistant" && messagesLength > 1)
 
@@ -539,23 +546,34 @@ function AssistantMessage({ msg, index, messagesLength, ui, isLoading, schema, l
       )}
       {msg.visualization && msg.visualization.config?.xKey && (msg.visualization.config?.yKey || msg.visualization.config?.series?.length) && msg.rows && msg.columns && msg.rows.length > 0 && (
         <>
-          <Chart
-            data={msg.rows.map((row) =>
-              Object.fromEntries(msg.columns!.map((col, i) => [col, row[i]]))
-            )}
-            config={{
-              type: msg.visualization.type || "bar",
-              xKey: msg.visualization.config.xKey,
-              yKey: msg.visualization.config.yKey,
-              series: msg.visualization.config.series,
-              title: msg.visualization.config.title,
-            }}
-            onClick={(item) => {
-              setClickedChart({ messageIndex: index, item })
-              setDeepDiveOpen(false)
-              setAiDirections(null)
-            }}
-          />
+          <div className="group relative">
+            <div className="absolute top-0 right-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <button
+                onClick={() => setDashboardDialogOpen(true)}
+                className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded bg-background/80 hover:bg-background border border-border text-muted-foreground hover:text-foreground shadow-xs"
+              >
+                <LayoutDashboard className="w-3 h-3" />
+                {_t("dashboard.add_to")}
+              </button>
+            </div>
+            <Chart
+              data={msg.rows.map((row) =>
+                Object.fromEntries(msg.columns!.map((col, i) => [col, row[i]]))
+              )}
+              config={{
+                type: msg.visualization.type || "bar",
+                xKey: msg.visualization.config.xKey,
+                yKey: msg.visualization.config.yKey,
+                series: msg.visualization.config.series,
+                title: msg.visualization.config.title,
+              }}
+              onClick={(item) => {
+                setClickedChart({ messageIndex: index, item })
+                setDeepDiveOpen(false)
+                setAiDirections(null)
+              }}
+            />
+          </div>
           <ChartDetailCard
             msg={msg}
             index={index}
@@ -564,6 +582,13 @@ function AssistantMessage({ msg, index, messagesLength, ui, isLoading, schema, l
             _t={_t}
             onGenerateAiDirections={onGenerateAiDirections}
             onSendMessage={onSendMessage}
+          />
+          <DashboardSelectorDialog
+            open={dashboardDialogOpen}
+            onOpenChange={setDashboardDialogOpen}
+            msg={msg}
+            index={index}
+            _t={_t}
           />
         </>
       )}
@@ -595,5 +620,82 @@ function AssistantMessage({ msg, index, messagesLength, ui, isLoading, schema, l
         )
       })()}
     </div>
+  )
+}
+
+function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  msg: Message
+  index: number
+  _t: (k: string) => string
+}) {
+  const { dashboards, createDashboard, addWidget } = useDashboardsStore()
+  const [adding, setAdding] = useState<string | null>(null)
+  const [showNewInput, setShowNewInput] = useState(false)
+  const [newName, setNewName] = useState("")
+
+  const addToDashboard = async (dashboardId: string) => {
+    setAdding(dashboardId)
+    try {
+      const widget = await createWidgetFromMessage(msg, index)
+      if (widget) {
+        addWidget(dashboardId, widget)
+        onOpenChange(false)
+      }
+    } catch {
+      // widget-factory not ready yet, fail silently
+    } finally {
+      setAdding(null)
+    }
+  }
+
+  const handleCreateNew = async () => {
+    const name = newName.trim() || _t("dashboard.create_new")
+    const id = createDashboard(name)
+    setShowNewInput(false)
+    setNewName("")
+    await addToDashboard(id)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogTitle>{_t("dashboard.select_dashboard")}</DialogTitle>
+        <div className="space-y-1 max-h-60 overflow-y-auto py-1">
+          {dashboards.map((d) => (
+            <div key={d.id} className="flex items-center justify-between py-1.5 px-1 rounded hover:bg-muted/40">
+              <span className="text-xs truncate flex-1">{d.name}</span>
+              <Button size="xs" variant="outline" onClick={() => addToDashboard(d.id)} disabled={adding === d.id}>
+                {adding === d.id ? "..." : _t("dashboard.add_to")}
+              </Button>
+            </div>
+          ))}
+          {dashboards.length === 0 && !showNewInput && (
+            <p className="text-xs text-muted-foreground text-center py-4">{_t("dashboard.create_new")}</p>
+          )}
+        </div>
+        <div className="border-t border-border pt-2">
+          {showNewInput ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateNew() }}
+                placeholder={_t("dashboard.create_new")}
+                className="flex-1 px-2 py-1 text-xs rounded border border-border bg-background outline-none focus:border-ring"
+                autoFocus
+              />
+              <Button size="xs" onClick={handleCreateNew}>{_t("dashboard.add_to")}</Button>
+            </div>
+          ) : (
+            <Button variant="outline" size="xs" className="w-full" onClick={() => setShowNewInput(true)}>
+              + {_t("dashboard.create_new")}
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

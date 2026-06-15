@@ -20,7 +20,9 @@ interface QueryState {
   error: string | null
   sort: SortState
   searchQuery: string
+  sql: string
   loadedRows: number
+  pendingAutoExecute: string | null
   setCurrentTable: (table: string | null) => void
   setCurrentSchema: (schema: ColumnMeta[]) => void
   setData: (data: TableData | null) => void
@@ -28,7 +30,9 @@ interface QueryState {
   setError: (error: string | null) => void
   setSort: (sort: SortState) => void
   setSearchQuery: (query: string) => void
+  setSql: (sql: string) => void
   setLoadedRows: (n: number) => void
+  setPendingAutoExecute: (sql: string | null) => void
 }
 
 export const useQueryStore = create<QueryState>((set) => ({
@@ -39,7 +43,9 @@ export const useQueryStore = create<QueryState>((set) => ({
   error: null,
   sort: { column: null, direction: null },
   searchQuery: "",
+  sql: "",
   loadedRows: 0,
+  pendingAutoExecute: null,
   setCurrentTable: (table) => set({ currentTable: table }),
   setCurrentSchema: (schema) => set({ currentSchema: schema }),
   setData: (data) => set({ data }),
@@ -47,7 +53,9 @@ export const useQueryStore = create<QueryState>((set) => ({
   setError: (error) => set({ error }),
   setSort: (sort) => set({ sort }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setSql: (sql) => set({ sql }),
   setLoadedRows: (n) => set({ loadedRows: n }),
+  setPendingAutoExecute: (sql) => set({ pendingAutoExecute: sql }),
 }))
 
 export function getFilteredRows(

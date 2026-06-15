@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/sidebar"
 import { StatusBar } from "@/components/status-bar"
 import { GridView } from "@/components/grid-view"
 import { PivotView } from "@/components/pivot-view"
+import { DashboardCanvas } from "@/components/dashboard-canvas"
 import { AgentChat } from "@/components/agent-chat"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LangToggle } from "@/components/lang-toggle"
@@ -19,6 +20,16 @@ import { ResizeHandle } from "@/components/resize-handle"
 import { useQueryOrchestrator } from "@/hooks/use-query-orchestrator"
 
 export default function Home() {
+  return (
+    <ErrorBoundary>
+      <DataProvider>
+        <HomeContent />
+      </DataProvider>
+    </ErrorBoundary>
+  )
+}
+
+function HomeContent() {
   const { _t } = useLang()
   const {
     sidebarOpen,
@@ -70,9 +81,7 @@ export default function Home() {
   const hasContent = selectedTable || data
 
   return (
-    <ErrorBoundary>
-      <DataProvider>
-      <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-background">
         <header className="flex items-center justify-between px-3 h-10 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <button
@@ -112,33 +121,45 @@ export default function Home() {
           </aside>
 
           <main className="flex-1 flex flex-col overflow-hidden">
-            {hasContent ? (
-              <ErrorBoundary>
-                <div className="flex-1 flex flex-col overflow-hidden p-3 gap-2">
-                  <div className="flex items-center gap-1 shrink-0 border-b border-border">
-                    <button
-                      onClick={() => setPivotView("grid")}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                        pivotView === "grid"
-                          ? "text-foreground border-b-2 border-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {_t("tab.grid")}
-                    </button>
-                    <button
-                      onClick={() => setPivotView("pivot")}
-                      className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                        pivotView === "pivot"
-                          ? "text-foreground border-b-2 border-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {_t("tab.pivot")}
-                    </button>
-                  </div>
+            <ErrorBoundary>
+              <div className="flex-1 flex flex-col overflow-hidden p-3 gap-2">
+                <div className="flex items-center gap-1 shrink-0 border-b border-border">
+                  <button
+                    onClick={() => setPivotView("grid")}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      pivotView === "grid"
+                        ? "text-foreground border-b-2 border-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {_t("tab.grid")}
+                  </button>
+                  <button
+                    onClick={() => setPivotView("pivot")}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      pivotView === "pivot"
+                        ? "text-foreground border-b-2 border-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {_t("tab.pivot")}
+                  </button>
+                  <button
+                    onClick={() => setPivotView("dashboard")}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      pivotView === "dashboard"
+                        ? "text-foreground border-b-2 border-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {_t("tab.dashboard")}
+                  </button>
+                </div>
 
-                  {pivotView === "grid" ? (
+                {pivotView === "dashboard" ? (
+                  <DashboardCanvas />
+                ) : hasContent ? (
+                  pivotView === "grid" ? (
                     <GridView
                       data={data}
                       isExecuting={isExecuting}
@@ -166,21 +187,21 @@ export default function Home() {
                     <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
                       请先选择表
                     </div>
-                  )}
-                </div>
-              </ErrorBoundary>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <h2 className="text-lg font-medium text-muted-foreground mb-1">
-                    Open Data Studio
-                  </h2>
-                  <p className="text-sm text-muted-foreground/60">
-                    {_t("main.select_table")}
-                  </p>
-                </div>
+                  )
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                      <h2 className="text-lg font-medium text-muted-foreground mb-1">
+                        Open Data Studio
+                      </h2>
+                      <p className="text-sm text-muted-foreground/60">
+                        {_t("main.select_table")}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </ErrorBoundary>
           </main>
 
           {rightPanelOpen && <ResizeHandle onResize={(w) => setRightPanelWidth(Math.max(200, Math.min(800, w)))} />}
@@ -201,7 +222,5 @@ export default function Home() {
 
         <StatusBar />
       </div>
-      </DataProvider>
-    </ErrorBoundary>
   )
 }

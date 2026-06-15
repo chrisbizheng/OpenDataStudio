@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useDeferredValue, useState, useMemo } from "react"
+import { useCallback, useDeferredValue, useState, useMemo, useEffect, startTransition } from "react"
 import { DataGrid } from "@/components/data-grid"
 import { SqlConsole } from "@/components/sql-console"
 import { QueryPanels } from "@/components/query-panels"
 import { createGridFilter } from "@/lib/grid-filter"
 import { exportData } from "@/lib/export"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
+import { useQueryStore } from "@/stores/query"
 import { useLang } from "@/components/lang-provider"
 import type { ColumnMeta } from "@/lib/types"
 import type { TableData } from "@/stores/query"
@@ -46,6 +47,19 @@ export function GridView({
 }: GridViewProps) {
   const { _t } = useLang()
   const [sqlText, setSqlText] = useState("")
+
+  const storeSql = useQueryStore((s) => s.sql)
+  const pendingAutoExecute = useQueryStore((s) => s.pendingAutoExecute)
+  const setPendingAutoExecute = useQueryStore((s) => s.setPendingAutoExecute)
+  useEffect(() => {
+    if (storeSql) startTransition(() => setSqlText(storeSql))
+  }, [storeSql])
+  useEffect(() => {
+    if (pendingAutoExecute) {
+      onExecuteSql(pendingAutoExecute)
+      setPendingAutoExecute(null)
+    }
+  }, [pendingAutoExecute, onExecuteSql, setPendingAutoExecute])
 
   const deferredSearch = useDeferredValue(searchQuery)
   const gridFilter = useMemo(() => createGridFilter(), [])
