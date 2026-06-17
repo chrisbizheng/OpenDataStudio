@@ -2,11 +2,11 @@
 
 import { useState, useMemo, useCallback, type ReactNode } from "react"
 import { useDroppable } from "@dnd-kit/core"
-import { usePivotStore, validatePivotExecution, buildPivotConfig } from "@/stores/pivot"
+import { usePivotStore, validatePivotExecution } from "@/stores/pivot"
 import { usePivotHistoryStore } from "@/stores/pivot-history"
 import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
-import { shortType, isDimensionType } from "@/lib/column-utils"
+import { formatType, isDimensionType } from "@/lib/column-type-classifier"
 import { astToSummary } from "@/lib/expression"
 import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
 import { IndicatorFormatDialog } from "./indicator-format-dialog"
@@ -16,7 +16,8 @@ import { SnakeSpinner } from "@/components/snake-spinner"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toPivotHistoryItem } from "@/lib/history-items"
-import { buildPivotIndicatorTitle, generatePivotSQL } from "@/lib/pivot-sql"
+import { buildPivotIndicatorTitle } from "@/lib/pivot-sql"
+import { runPivotExecution } from "@/lib/pivot-execution"
 import { usePivotOrchestrator } from "@/hooks/use-pivot-orchestrator"
 import { useData } from "@/components/data-provider"
 import type { ColumnMeta } from "@/lib/types"
@@ -93,7 +94,7 @@ export function PivotConfigPanel({
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
   const dbEntries = historyEntries.filter((e) => e.database === selectedDatabase)
 
-  const { getResolvedRole, addFieldAsFilter, addFieldAsIndicator, addRow, addColumn, addIndicator } = usePivotOrchestrator(schema, tableName, database)
+  const { pivotConfig, store, getResolvedRole, addFieldAsFilter, addFieldAsIndicator, addRow, addColumn } = usePivotOrchestrator(schema, tableName, database)
 
   const dimensionCandidates = useMemo(
     () => schema.filter((c) => isDimensionType(c.type)),
@@ -124,51 +125,45 @@ export function PivotConfigPanel({
   )
 
   const handleExecute = useCallback(async () => {
-    const state = usePivotStore.getState()
-    const validationError = validatePivotExecution(state, tableName, database)
+    const validationError = validatePivotExecution(store, tableName, database)
     if (validationError) {
       setError(validationError)
       return
     }
 
-    setExecuting(true)
-    setError(null)
-
-    const config = buildPivotConfig(state)
-    const sql = generatePivotSQL(config, tableName, database)
-
-    try {
-      const json = await queryEngine.execute(sql, database)
-      if (!json) return
-      setResultData({ columns: json.columns, rows: json.rows })
-      setExecuting(false)
-      setLastSQL(sql)
-
-      const updatedState = usePivotStore.getState()
-      if (updatedState.resultData) {
-        addEntry({
-          tableName,
-          database,
-          config: {
-            rows: updatedState.rows,
-            columns: updatedState.columns,
-            indicators: updatedState.indicators,
-            calculatedIndicators: updatedState.calculatedIndicators,
-            filters: updatedState.filters,
-            sort: updatedState.sort ?? undefined,
-            totals: updatedState.totals,
-          },
-          sql: updatedState.lastSQL ?? "",
-          rowCount: updatedState.resultData.rows.length,
-        })
-        onExecute()
+    for await (const event of runPivotExecution(
+      { config: pivotConfig, tableName, database },
+      { executeSql: (sql, db) => queryEngine.execute(sql, db) }
+    )) {
+      switch (event.type) {
+        case "started":
+          setExecuting(true)
+          setError(null)
+          break
+        case "succeeded":
+          setResultData({ columns: event.result.columns, rows: event.result.rows })
+          setLastSQL(event.sql)
+          setExecuting(false)
+          addEntry({
+            tableName,
+            database,
+            config: event.config,
+            sql: event.sql,
+            rowCount: event.result.rows.length,
+          })
+          onExecute()
+          break
+        case "error":
+          setError(event.message)
+          setLastSQL(event.sql)
+          setExecuting(false)
+          break
+        case "aborted":
+          setExecuting(false)
+          break
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "网络错误")
-      setExecuting(false)
-      setLastSQL(sql)
     }
-  }, [tableName, database, addEntry, onExecute, queryEngine, setExecuting, setError, setResultData, setLastSQL])
+  }, [store, pivotConfig, tableName, database, addEntry, onExecute, queryEngine, setExecuting, setError, setResultData, setLastSQL])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -224,7 +219,7 @@ export function PivotConfigPanel({
                   .filter((d) => getResolvedRole(d.name))
                   .map((d) => (
                     <SelectItem key={d.name} value={d.name}>
-                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{shortType(d.type)}</span></span>
+                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{formatType(d.type)}</span></span>
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -247,7 +242,7 @@ export function PivotConfigPanel({
                   .filter((d) => !usedRowFields.has(d.name))
                   .map((d) => (
                     <SelectItem key={d.name} value={d.name}>
-                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{shortType(d.type)}</span></span>
+                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{formatType(d.type)}</span></span>
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -270,7 +265,7 @@ export function PivotConfigPanel({
                   .filter((d) => !usedColFields.has(d.name))
                   .map((d) => (
                     <SelectItem key={d.name} value={d.name}>
-                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{shortType(d.type)}</span></span>
+                      <span className="text-xs">{d.name} <span className="text-muted-foreground">{formatType(d.type)}</span></span>
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -278,9 +273,9 @@ export function PivotConfigPanel({
           </DroppableZone>
         </Section>
 
-        {/* Indicators */}
+        {/* Indicators — P1-11: stronger visual hierarchy */}
         <Section title={_t("pivot.indicators")} count={indicators.length}>
-          <div className="flex flex-col gap-1 min-h-[28px] p-1 rounded border border-dashed border-border">
+          <div className="flex flex-col gap-1 min-h-[28px] p-1.5 rounded-md border border-solid border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/30 dark:bg-emerald-900/10">
             {indicators.map((ind) => (
               <span
                 key={ind.key}
@@ -350,7 +345,7 @@ export function PivotConfigPanel({
                 {indicatorCandidates
                   .map((c) => (
                     <SelectItem key={c.name} value={c.name}>
-                      <span className="text-xs">{c.name} <span className="text-muted-foreground">{shortType(c.type)}</span></span>
+                      <span className="text-xs">{c.name} <span className="text-muted-foreground">{formatType(c.type)}</span></span>
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -358,9 +353,9 @@ export function PivotConfigPanel({
           </div>
         </Section>
 
-        {/* Calculated Indicators */}
+        {/* Calculated Indicators — P1-11: stronger visual hierarchy */}
         <Section title={_t("pivot.calculated")} count={calculatedIndicators.length}>
-          <div className="flex flex-col gap-1 min-h-[28px] p-1 rounded border border-dashed border-border">
+          <div className="flex flex-col gap-1 min-h-[28px] p-1.5 rounded-md border border-solid border-violet-200 dark:border-violet-800/50 bg-violet-50/30 dark:bg-violet-900/10">
             {calculatedIndicators.map((calc) => (
               <div
                 key={calc.key}
@@ -407,7 +402,7 @@ export function PivotConfigPanel({
 
         <div className="flex flex-col flex-1 min-h-0 border-t border-border">
           <div className="flex border-b border-border shrink-0">
-            <div className="flex-1 text-[10px] font-medium py-1.5 px-2 text-foreground border-b-2 border-foreground">
+            <div className="flex-1 text-[10px] font-medium py-1.5 px-2 text-muted-foreground border-b border-border">
               {_t("panel.history")}
             </div>
           </div>

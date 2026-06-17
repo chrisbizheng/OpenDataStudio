@@ -37,6 +37,7 @@
 - **默认角色 (Default Role)**：由维度分类规则自动推断出的字段角色
 - **角色覆盖 (Role Override)**：用户手动设置的字段角色，优先于默认角色
 - **BETWEEN 算子**：筛选器中的范围条件，用于数值或日期区间
+- **透视执行生命周期 (Pivot Execution Lifecycle)**：透视查询执行全流程的深模块，隐藏 SQL 生成、执行、中止/错误分类、生命周期事件发射。接口：`runPivotExecution(input, deps) → AsyncGenerator<PivotExecutionEvent>`。事件类型：`started` / `succeeded(sql, result, config)` / `error(sql, message)` / `aborted`。缝合点：`PivotExecutionDeps`（1 适配器：`executeSql` 委托给 QueryEngine）。input 必须是已校验的 `PivotConfig`（校验由 caller 用 `validatePivotExecution` 完成，执行模块不混"不能启动"与"启动后失败"）。同构于服务端 `runAgentPipeline`、客户端 `runChatSession`、Query Lifecycle。中止（executeSql 返回 null）发射 `aborted` 事件，caller 负责重置 isExecuting，避免按钮卡死
 
 ## 用户界面术语
 
