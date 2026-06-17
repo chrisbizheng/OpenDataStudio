@@ -4,12 +4,8 @@ import { useMemo, useCallback } from "react"
 import ReactECharts from "echarts-for-react"
 import { useTheme } from "@/components/theme-provider"
 import {
-  resolveType,
-  autoPivot,
-  computeStats,
-} from "@/lib/chart-data"
-import {
   buildEChartsOption,
+  prepareChartData,
   type ChartConfig,
 } from "@/lib/chart-helpers"
 
@@ -24,30 +20,7 @@ export function Chart({ data, config, onClick, onBrushSelect }: ChartProps) {
   const { resolved: themeMode } = useTheme()
   const isDark = themeMode === "dark"
 
-  const { chartData, resolvedType, resolvedXKey, barGroups } = useMemo(() => {
-    if (!data || data.length === 0) return { chartData: [], resolvedType: "bar", resolvedXKey: config.xKey }
-
-    const yKey = config.yKey || ""
-    const rawData = yKey
-      ? data.map((row) => ({ ...row, [yKey]: Number(row[yKey]) || 0 }))
-      : data
-
-    const type = resolveType(config.type)
-
-    if (type === "composed" && config.series?.length) {
-      return { chartData: rawData, resolvedType: type, resolvedXKey: config.xKey }
-    }
-
-    if (yKey && type !== "pie" && type !== "radar" && type !== "radialBar" && type !== "treemap") {
-      const pivoted = autoPivot(rawData, yKey, config.xKey)
-      return { chartData: pivoted.data, resolvedType: type, resolvedXKey: pivoted.xKey, barGroups: pivoted.barGroups }
-    }
-
-    return { chartData: rawData, resolvedType: type, resolvedXKey: config.xKey }
-  }, [data, config.type, config.xKey, config.yKey, config.series])
-
-  const yKey = config.yKey || config.series?.[0]?.yKey || ""
-  const stats = useMemo(() => yKey ? computeStats(chartData, yKey) : { max: 0, maxItem: null }, [chartData, yKey])
+  const prepared = useMemo(() => prepareChartData(data, config), [data, config])
 
   const handleEvents = useCallback((chart: unknown) => {
     const echarts = chart as { on: (event: string, handler: (params: unknown) => void) => void }
@@ -61,7 +34,7 @@ export function Chart({ data, config, onClick, onBrushSelect }: ChartProps) {
       const value = Number(rawVal) || 0
       const row = p.data && typeof p.data === "object" && !Array.isArray(p.data)
         ? p.data
-        : (p.dataIndex !== undefined ? chartData[p.dataIndex] ?? {} : {})
+        : (p.dataIndex !== undefined ? prepared.chartData[p.dataIndex] ?? {} : {})
       onClick({ key, value, row, seriesName: p.seriesName })
     })
 
@@ -69,18 +42,15 @@ export function Chart({ data, config, onClick, onBrushSelect }: ChartProps) {
       echarts.on("brushSelected", (params: unknown) => {
         const p = params as { batch?: { selected?: { dataIndex?: number[] }[] }[] }
         const indices = p.batch?.[0]?.selected?.[0]?.dataIndex ?? []
-        const selected = indices.map((i: number) => chartData[i]).filter(Boolean)
+        const selected = indices.map((i: number) => prepared.chartData[i]).filter(Boolean)
         if (selected.length > 0) onBrushSelect(selected)
       })
     }
-  }, [onClick, onBrushSelect, chartData])
+  }, [onClick, onBrushSelect, prepared.chartData])
 
   const option = useMemo(() =>
-    buildEChartsOption({
-      chartData, config, resolvedType, resolvedXKey, barGroups,
-      isDark, stats, yKey, onBrushSelect,
-    }),
-    [chartData, config, resolvedType, resolvedXKey, barGroups, isDark, stats, yKey, onBrushSelect]
+    buildEChartsOption({ ...prepared, config, isDark, onBrushSelect }),
+    [prepared, config, isDark, onBrushSelect]
   )
 
   const height = config.height ?? 280

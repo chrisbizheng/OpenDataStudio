@@ -1,4 +1,54 @@
-import { matchRow } from "./grid-filter"
+import type { AggregationType, PivotIndicator } from "./pivot-sql"
+import { isIndicatorType } from "./column-type-classifier"
+
+export function toggleFilterValue(values: unknown[], value: unknown): unknown[] {
+  return values.includes(value)
+    ? values.filter((item) => item !== value)
+    : [...values, value]
+}
+
+export const NUMERIC_AGGREGATION_ORDER: AggregationType[] = [
+  "SUM",
+  "AVG",
+  "COUNT",
+  "MIN",
+  "MAX",
+  "DISTINCT_COUNT",
+]
+
+export const NON_NUMERIC_AGGREGATION_ORDER: AggregationType[] = [
+  "COUNT",
+  "DISTINCT_COUNT",
+]
+
+export function buildPivotIndicatorTitle(field: string, aggregation: AggregationType): string {
+  return `${field}-${aggregation}`
+}
+
+export function buildNextPivotIndicator(
+  field: string,
+  comment: string,
+  existing: PivotIndicator[],
+  fieldType?: string
+): PivotIndicator {
+  const isNumeric = fieldType == null || isIndicatorType(fieldType)
+  const aggregationOrder = isNumeric ? NUMERIC_AGGREGATION_ORDER : NON_NUMERIC_AGGREGATION_ORDER
+  const used = new Set(existing.filter((indicator) => indicator.field === field).map((indicator) => indicator.aggregation))
+  const aggregation = aggregationOrder.find((agg) => !used.has(agg)) ?? "COUNT"
+  const title = buildPivotIndicatorTitle(field, aggregation)
+  return {
+    key: title,
+    field,
+    title,
+    aggregation,
+    comment: comment !== field ? comment : undefined,
+  }
+}
+
+function matchRow(row: unknown[], query: string): boolean {
+  const q = query.toLowerCase()
+  return row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
+}
 
 export interface PivotClientData {
   columns: string[]

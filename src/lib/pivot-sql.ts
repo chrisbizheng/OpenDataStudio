@@ -1,7 +1,6 @@
 import { extractDependencies, toSQL } from "./expression"
 import type { ExpressionNode } from "./ast-types"
 import { escapeField, escapeValue } from "./sql-utils"
-import { isIndicatorType } from "./column-utils"
 
 export type AggregationType =
   | "SUM"
@@ -182,63 +181,4 @@ export function generatePivotSQL(
   const limit = config.limit ? `LIMIT ${config.limit}` : ""
 
   return [`SELECT\n  ${select}`, from, where, groupBy, orderBy, limit].filter(Boolean).join("\n")
-}
-
-export function buildDistinctFilterValuesSQL(
-  database: string,
-  table: string,
-  field: string
-): string {
-  const f = escapeField(field)
-  return [
-    `SELECT DISTINCT ${f} AS \`value\``,
-    `FROM ${escapeField(database)}.${escapeField(table)}`,
-    `WHERE ${f} IS NOT NULL`,
-    `ORDER BY ${f}`,
-    "LIMIT 200",
-  ].join("\n")
-}
-
-export function toggleFilterValue(values: unknown[], value: unknown): unknown[] {
-  return values.includes(value)
-    ? values.filter((item) => item !== value)
-    : [...values, value]
-}
-
-export const NUMERIC_AGGREGATION_ORDER: AggregationType[] = [
-  "SUM",
-  "AVG",
-  "COUNT",
-  "MIN",
-  "MAX",
-  "DISTINCT_COUNT",
-]
-
-export const NON_NUMERIC_AGGREGATION_ORDER: AggregationType[] = [
-  "COUNT",
-  "DISTINCT_COUNT",
-]
-
-export function buildPivotIndicatorTitle(field: string, aggregation: AggregationType): string {
-  return `${field}-${aggregation}`
-}
-
-export function buildNextPivotIndicator(
-  field: string,
-  comment: string,
-  existing: PivotIndicator[],
-  fieldType?: string
-): PivotIndicator {
-  const isNumeric = fieldType == null || isIndicatorType(fieldType)
-  const aggregationOrder = isNumeric ? NUMERIC_AGGREGATION_ORDER : NON_NUMERIC_AGGREGATION_ORDER
-  const used = new Set(existing.filter((indicator) => indicator.field === field).map((indicator) => indicator.aggregation))
-  const aggregation = aggregationOrder.find((agg) => !used.has(agg)) ?? "COUNT"
-  const title = buildPivotIndicatorTitle(field, aggregation)
-  return {
-    key: title,
-    field,
-    title,
-    aggregation,
-    comment: comment !== field ? comment : undefined,
-  }
 }

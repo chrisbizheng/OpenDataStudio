@@ -18,8 +18,6 @@ interface PivotGridProps {
   onCellClick?: (params: { dimensionValues: Record<string, unknown>; indicatorKey: string }) => void
 }
 
-type SortDir = "asc" | "desc" | null
-
 export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: PivotGridProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<VTable.PivotTable | null>(null)
@@ -27,12 +25,10 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
   const { _t } = useLang()
   const [searchQuery, setSearchQuery] = useState("")
   const deferredSearchQuery = useDeferredValue(searchQuery)
-  const [sortColumn, setSortColumn] = useState<string | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>(null)
 
-  const filteredAndSortedData = useMemo(
-    () => filterAndSortPivotData(data, deferredSearchQuery, sortColumn, sortDir),
-    [data, deferredSearchQuery, sortColumn, sortDir]
+  const filteredData = useMemo(
+    () => filterAndSortPivotData(data, deferredSearchQuery, null, null),
+    [data, deferredSearchQuery]
   )
 
   const schemaTitleByField = useMemo(() => {
@@ -44,8 +40,8 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
   }, [schema])
 
   const records = useMemo(
-    () => buildPivotRecords(filteredAndSortedData),
-    [filteredAndSortedData]
+    () => buildPivotRecords(filteredData),
+    [filteredData]
   )
 
   const option = useMemo(() => {
@@ -157,26 +153,10 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
       tableRef.current = null
     }
 
-    if (filteredAndSortedData.rows.length === 0) return
+    if (filteredData.rows.length === 0) return
 
     const tableInstance = new VTable.PivotTable(containerRef.current, option)
     tableRef.current = tableInstance
-
-    tableInstance.on("sort_click", (args: unknown) => {
-      const sortInfo = args as { key?: string; order?: string }
-      if (sortInfo.key) {
-        if (sortColumn === sortInfo.key && sortDir === "desc") {
-          setSortColumn(null)
-          setSortDir(null)
-        } else if (sortColumn === sortInfo.key) {
-          setSortDir("desc")
-        } else {
-          setSortColumn(sortInfo.key)
-          setSortDir("asc")
-        }
-      }
-      return false
-    })
 
     if (onCellClick) {
       tableInstance.on("click_cell", (args) => {
@@ -205,7 +185,7 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
         tableRef.current = null
       }
     }
-  }, [option, onCellClick, filteredAndSortedData.rows.length, sortColumn, sortDir])
+  }, [option, onCellClick, filteredData.rows.length])
 
   // ResizeObserver: handle container size changes (e.g. sidebar toggle)
   useEffect(() => {
@@ -246,8 +226,8 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
       <div className="flex items-center gap-2 shrink-0">
         <SearchBar value={searchQuery} onChange={setSearchQuery} />
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-          {filteredAndSortedData.rows.length} {_t("pivot.result_rows")}
-          {filteredAndSortedData.rows.length < data.rows.length
+          {filteredData.rows.length} {_t("pivot.result_rows")}
+          {filteredData.rows.length < data.rows.length
             ? ` / ${data.rows.length}`
             : ""}
           {config.limit && data.rows.length >= config.limit
@@ -257,17 +237,6 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
             ? ` · ${_t("pivot.large_warning")}`
             : ""}
         </span>
-        {sortColumn && (
-          <button
-            onClick={() => {
-              setSortColumn(null)
-              setSortDir(null)
-            }}
-            className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted"
-          >
-            清除排序
-          </button>
-        )}
       </div>
       <div
         ref={containerRef}

@@ -1,11 +1,12 @@
 import type { ColumnMeta } from "./types"
-import { isMetricByName, isIndicatorType, isDimensionType, isMetricColumn } from "./column-utils"
+import { isMetricByName, isIndicatorType, isDimensionType, unwrapNullable } from "./column-type-classifier"
+import { isMetricColumn } from "./column-utils"
 
 export function suggestQuestions(schema: ColumnMeta[], lang: string): string[] {
   const suggestions: string[] = []
   const nums = schema.filter((c) => isIndicatorType(c.type))
-  const strs = schema.filter((c) => isDimensionType(c.type) && /^(String|FixedString|LowCardinality)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
-  const dates = schema.filter((c) => /^(Date|DateTime)/.test(c.type.replace(/^Nullable\((.+)\)$/, "$1")))
+  const strs = schema.filter((c) => isDimensionType(c.type) && /^(String|FixedString|LowCardinality)/.test(unwrapNullable(c.type)))
+  const dates = schema.filter((c) => /^(Date|DateTime)/.test(unwrapNullable(c.type)))
 
   const isZh = lang === "zh"
 

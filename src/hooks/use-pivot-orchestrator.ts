@@ -4,8 +4,8 @@ import { usePivotStore } from "@/stores/pivot"
 import { buildPivotConfig } from "@/stores/pivot"
 import { useFieldRoleStore } from "@/stores/field-role"
 import { generatePivotSQL } from "@/lib/pivot-sql"
-import { buildNextPivotIndicator } from "@/lib/pivot-sql"
-import { resolveFieldRole } from "@/lib/field-role"
+import { buildNextPivotIndicator } from "@/lib/pivot-client-utils"
+import { resolveFieldRole } from "@/lib/column-type-classifier"
 import { resolveDrop, type PivotDragItem, type PivotDropZone } from "@/lib/pivot-dnd"
 import type { ColumnMeta } from "@/lib/types"
 
@@ -26,22 +26,11 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
   const addFilter = usePivotStore((s) => s.addFilter)
   const roleOverrides = useFieldRoleStore((s) => s.overrides)
 
-  const configKey = JSON.stringify({
-    r: store.rows,
-    c: store.columns,
-    i: store.indicators,
-    ci: store.calculatedIndicators,
-    f: store.filters,
-    s: store.sort,
-    t: store.totals,
-  })
-
-  const pivotConfig = useMemo(() => buildPivotConfig(store), [configKey])
+  const pivotConfig = useMemo(() => buildPivotConfig(store), [store])
 
   const generateSQL = useCallback(() => {
-    const config = usePivotStore.getState().getPivotConfig()
-    return generatePivotSQL(config, tableName, database)
-  }, [tableName, database])
+    return generatePivotSQL(pivotConfig, tableName, database)
+  }, [pivotConfig, tableName, database])
 
   const getResolvedRole = useCallback(
     (field: string) => resolveFieldRole(field, schema, roleOverrides, database, tableName),

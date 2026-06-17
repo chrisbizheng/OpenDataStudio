@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { executeReadOnly } from "@/lib/clickhouse"
+import { executeReadOnly, classifyError } from "@/lib/clickhouse"
 import { logger } from "@/lib/logger"
+import { getTraceId } from "@/lib/trace-id"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
-  const traceId = request.headers.get("x-trace-id") || crypto.randomUUID()
+  const traceId = getTraceId(request)
   const log = logger.child({ traceId, route: "query" })
 
   try {
@@ -26,28 +27,11 @@ export async function POST(request: NextRequest) {
     log.info({ sql: sql.slice(0, 100), rows: result.rows.length, cols: result.columns.length }, "query:done")
     return NextResponse.json(result)
   } catch (e) {
-    const message =
-      e instanceof Error ? e.message : "Query execution failed"
-    log.error({ err: message }, "query:error")
-
-    if (message.startsWith("Only SELECT")) {
-      return NextResponse.json(
-        { error: "forbidden", message },
-        { status: 403 }
-      )
-    }
-
-    if (message.includes("DB::Exception")) {
-      const clean = message.replace(/^.*DB::Exception:\s*/, "").replace(/\n.*$/, "")
-      return NextResponse.json(
-        { error: "sql_error", message: clean },
-        { status: 400 }
-      )
-    }
-
+    const classified = classifyError(e)
+    log.error({ err: classified.message }, "query:error")
     return NextResponse.json(
-      { error: "query_failed", message },
-      { status: 500 }
+      { error: classified.kind, message: classified.message },
+      { status: classified.statusCode }
     )
   }
 }

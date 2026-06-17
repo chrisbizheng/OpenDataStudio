@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { migrateIndicatorKey } from "../pivot"
+import { migrateIndicatorKey } from "../migrate-pivot-store"
 
 describe("migrateIndicatorKey", () => {
   it("迁移 sales_sum → sales-SUM", () => {

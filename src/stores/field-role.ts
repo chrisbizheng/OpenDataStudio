@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import { createFieldRoleKey, type FieldRole } from "../lib/field-role"
+import { createFieldRoleKey, type FieldRole } from "../lib/column-type-classifier"
 
 interface FieldRoleState {
   overrides: Record<string, FieldRole>

@@ -30,6 +30,33 @@ export interface ChartConfig {
     pieDonut?: boolean
     pieRadius?: number
     colorTheme?: string
+    // Background & Grid
+    canvasBg?: string
+    chartBg?: string
+    gridPaddingLeft?: number
+    gridPaddingRight?: number
+    gridPaddingTop?: number
+    gridPaddingBottom?: number
+    gridBorderWidth?: number
+    gridBorderColor?: string
+    // Split Line
+    splitLineShow?: boolean
+    splitLineColor?: string
+    splitLineType?: string
+    // Animation
+    animationDuration?: number
+    // Scatter-specific
+    scatterSymbolSize?: number
+    scatterSymbol?: string
+    // Radar-specific
+    radarShape?: string
+    radarSplitNumber?: number
+    // RadialBar-specific
+    radialStartAngle?: number
+    radialEndAngle?: number
+    // Treemap-specific
+    treemapLeafDepth?: number
+    treemapBreadcrumb?: boolean
   }
   label?: {
     showDataLabels?: boolean
@@ -305,7 +332,8 @@ export function buildSeries(
       type: "treemap",
       data: tData,
       label: { fontSize: 10 },
-      breadcrumb: { show: false },
+      breadcrumb: { show: config.style?.treemapBreadcrumb ?? false },
+      ...(config.style?.treemapLeafDepth && { leafDepth: config.style.treemapLeafDepth }),
     }]
   }
 
@@ -327,7 +355,8 @@ export function buildSeries(
       name: s.label || s.yKey,
       data: chartData.map((d): [unknown, number] => [d[xKey], Number(d[s.yKey]) || 0]),
       itemStyle: { color: COLORS[i % COLORS.length] },
-      symbolSize: 8,
+      symbolSize: config.style?.scatterSymbolSize ?? 8,
+      ...(config.style?.scatterSymbol && { symbol: config.style.scatterSymbol }),
       emphasis: { focus: "series" as const },
     }))
   }
@@ -369,15 +398,120 @@ export function markMax(
   first.markPoint = { data: markData }
 }
 
-export function buildEChartsOption(params: {
+export interface ChartPreparedData {
   chartData: Record<string, unknown>[]
-  config: ChartConfig
   resolvedType: string
   resolvedXKey: string
   barGroups?: string[]
-  isDark: boolean
   stats: { max: number; maxItem: Record<string, unknown> | null }
   yKey: string
+}
+
+function autoPivot(
+  data: Record<string, unknown>[],
+  yKey: string,
+  xKey: string,
+): { data: Record<string, unknown>[]; xKey: string; barGroups?: string[] } {
+  if (!data[0] || typeof data[0] !== "object") return { data, xKey }
+  const dimCols = Object.keys(data[0]).filter((k) => k !== yKey)
+  if (dimCols.length < 2) return { data, xKey }
+
+  const dimStats = dimCols.map((k) => {
+    const unique = new Set(data.map((d) => String(d[k] ?? "")))
+    return { col: k, uniqueCount: unique.size }
+  })
+  dimStats.sort((a, b) => a.uniqueCount - b.uniqueCount)
+
+  const bestXKey = dimStats[0].col
+  const bestSecondary = dimStats[1].col
+
+  const groups = new Map<string, Set<string>>()
+  for (const row of data) {
+    const xk = String(row[bestXKey] ?? "")
+    if (!groups.has(xk)) groups.set(xk, new Set())
+    groups.get(xk)!.add(String(row[bestSecondary] ?? ""))
+  }
+  const hasGrouping = Array.from(groups.values()).some((s) => s.size > 1)
+  if (!hasGrouping) return { data, xKey }
+
+  const secondaryValues = [...new Set(data.map((d) => String(d[bestSecondary] ?? "")))]
+  const pivoted = new Map<string, Record<string, unknown>>()
+  for (const row of data) {
+    const xk = String(row[bestXKey] ?? "")
+    if (!pivoted.has(xk)) pivoted.set(xk, { [bestXKey]: xk })
+    const sv = String(row[bestSecondary] ?? "")
+    pivoted.get(xk)![sv] = Number(row[yKey]) || 0
+  }
+  return { data: Array.from(pivoted.values()), xKey: bestXKey, barGroups: secondaryValues }
+}
+
+function computeStats(data: Record<string, unknown>[], yKey: string) {
+  let max = -Infinity
+  let maxItem: Record<string, unknown> | null = null
+  for (const d of data) {
+    const v = Number(d[yKey])
+    if (v > max) { max = v; maxItem = d }
+  }
+  return { max, maxItem }
+}
+
+export function prepareChartData(
+  data: Record<string, unknown>[],
+  config: ChartConfig,
+): ChartPreparedData {
+  const yKey = config.yKey || config.series?.[0]?.yKey || ""
+
+  if (!data || data.length === 0) {
+    return {
+      chartData: [],
+      resolvedType: "bar",
+      resolvedXKey: config.xKey,
+      stats: { max: 0, maxItem: null },
+      yKey,
+    }
+  }
+
+  const rawYKey = config.yKey || ""
+  const rawData = rawYKey
+    ? data.map((row) => ({ ...row, [rawYKey]: Number(row[rawYKey]) || 0 }))
+    : data
+
+  const type = resolveType(config.type)
+
+  if (type === "composed" && config.series?.length) {
+    return {
+      chartData: rawData,
+      resolvedType: type,
+      resolvedXKey: config.xKey,
+      stats: yKey ? computeStats(rawData, yKey) : { max: 0, maxItem: null },
+      yKey,
+    }
+  }
+
+  if (rawYKey && type !== "pie" && type !== "radar" && type !== "radialBar" && type !== "treemap") {
+    const pivoted = autoPivot(rawData, rawYKey, config.xKey)
+    return {
+      chartData: pivoted.data,
+      resolvedType: type,
+      resolvedXKey: pivoted.xKey,
+      barGroups: pivoted.barGroups,
+      stats: computeStats(pivoted.data, rawYKey),
+      yKey,
+    }
+  }
+
+  return {
+    chartData: rawData,
+    resolvedType: type,
+    resolvedXKey: config.xKey,
+    stats: yKey ? computeStats(rawData, yKey) : { max: 0, maxItem: null },
+    yKey,
+  }
+}
+
+export function buildEChartsOption(params: ChartPreparedData & {
+  config: ChartConfig
+  isDark: boolean
   onBrushSelect?: (items: Record<string, unknown>[]) => void
 }): EChartsOption {
   const { chartData, config, resolvedType, resolvedXKey, barGroups, isDark, stats, yKey, onBrushSelect } = params
@@ -392,7 +526,7 @@ export function buildEChartsOption(params: {
     tooltip: buildTooltip(isDark),
     toolbox: buildToolbox(resolvedType, hasMultipleSeries),
     animation: true,
-    animationDuration: 600,
+    animationDuration: config.style?.animationDuration ?? 600,
     animationEasing: "cubicOut",
   }
 
@@ -420,6 +554,23 @@ export function buildEChartsOption(params: {
     const hasDataZoom = ["bar", "line", "area", "scatter", "composed"].includes(resolvedType) && isSequentialData(chartData, resolvedXKey)
     const gridBottom = hasDataZoom ? 68 : onBrushSelect ? 60 : 32
     opt.grid = { left: 50, right: 20, top: config.title ? 52 : 32, bottom: gridBottom, containLabel: false }
+    if (config.style?.canvasBg) {
+      opt.backgroundColor = config.style.canvasBg
+    }
+    if (config.style?.chartBg || config.style?.gridBorderWidth || config.style?.gridBorderColor
+        || config.style?.gridPaddingLeft !== undefined || config.style?.gridPaddingRight !== undefined
+        || config.style?.gridPaddingTop !== undefined || config.style?.gridPaddingBottom !== undefined) {
+      opt.grid = {
+        ...opt.grid,
+        ...(config.style.chartBg && { backgroundColor: config.style.chartBg }),
+        ...(config.style.gridPaddingLeft !== undefined && { left: config.style.gridPaddingLeft }),
+        ...(config.style.gridPaddingRight !== undefined && { right: config.style.gridPaddingRight }),
+        ...(config.style.gridPaddingTop !== undefined && { top: config.style.gridPaddingTop }),
+        ...(config.style.gridPaddingBottom !== undefined && { bottom: config.style.gridPaddingBottom }),
+        ...(config.style.gridBorderWidth !== undefined && { borderWidth: config.style.gridBorderWidth }),
+        ...(config.style.gridBorderColor && { borderColor: config.style.gridBorderColor }),
+      }
+    }
     opt.xAxis = {
       type: "category",
       data: chartData.map((d) => String(d[resolvedXKey] ?? "")),
@@ -432,6 +583,16 @@ export function buildEChartsOption(params: {
       axisLabel: { fontSize: 10, color: isDark ? "#aaa" : "#666" },
       splitLine: { lineStyle: { color: isDark ? "#333" : "#eee" } },
       axisLine: { show: false },
+    }
+    if (config.style?.splitLineShow === false) {
+      (opt.yAxis as Record<string, unknown>).splitLine = { show: false }
+    } else if (config.style?.splitLineColor || config.style?.splitLineType) {
+      const sl = { ...((opt.yAxis as Record<string, unknown>).splitLine as object || {}) } as Record<string, unknown>
+      const ls = { ...(sl.lineStyle as object || {}) } as Record<string, unknown>
+      if (config.style.splitLineColor) ls.color = config.style.splitLineColor
+      if (config.style.splitLineType) ls.type = config.style.splitLineType
+      sl.lineStyle = ls
+      ;(opt.yAxis as Record<string, unknown>).splitLine = sl
     }
 
     if (["bar", "line", "area", "scatter", "composed"].includes(resolvedType) && isSequentialData(chartData, resolvedXKey)) {
@@ -446,7 +607,8 @@ export function buildEChartsOption(params: {
   if (resolvedType === "radar") {
     opt.radar = {
       indicator: chartData.map((d) => ({ name: String(d[resolvedXKey] ?? "").slice(0, 8) })),
-      shape: "polygon",
+      shape: (config.style?.radarShape ?? "polygon") as "polygon" | "circle",
+      ...(config.style?.radarSplitNumber && { splitNumber: config.style.radarSplitNumber }),
       splitArea: { areaStyle: { color: isDark ? ["#1a1a2e", "#16213e"] : ["#f5f5ff", "#fff"] } },
       axisLine: { lineStyle: { color: isDark ? "#444" : "#ddd" } },
       splitLine: { lineStyle: { color: isDark ? "#333" : "#eee" } },
@@ -454,9 +616,13 @@ export function buildEChartsOption(params: {
   }
 
   if (resolvedType === "radialBar") {
+    const startAngle = config.style?.radialStartAngle ?? 90
+    const endAngle = config.style?.radialEndAngle ?? -90
     opt.polar = { radius: ["20%", "80%"] }
     opt.angleAxis = {
       max: Math.max(...chartData.map((d) => Number(d[yKey]) || 0)) * 1.2,
+      startAngle,
+      endAngle,
       show: false,
     }
     opt.radiusAxis = {

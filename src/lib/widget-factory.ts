@@ -5,7 +5,7 @@
  * same condition as agent-chat.tsx:540), and persists query results to
  * IndexedDB via widgetCache so the chart can render offline.
  */
-import type { Message } from "@/lib/agent-types"
+import type { AssistantMessage } from "@/lib/agent-types"
 import type { ChartWidget } from "@/stores/dashboards"
 import { widgetCache } from "@/lib/widget-cache"
 
@@ -17,7 +17,7 @@ import { widgetCache } from "@/lib/widget-cache"
  * to IndexedDB under the widget ID for later retrieval.
  */
 export async function createWidgetFromMessage(
-  msg: Message,
+  msg: AssistantMessage,
   index: number,
 ): Promise<ChartWidget | null> {
   const viz = msg.visualization

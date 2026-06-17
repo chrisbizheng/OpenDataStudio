@@ -1,6 +1,6 @@
 "use client"
 
-import type { FieldRole } from "@/lib/field-role"
+import type { FieldRole } from "@/lib/column-type-classifier"
 import type { MouseEvent as ReactMouseEvent } from "react"
 
 export function FieldRoleBadge({
@@ -21,6 +21,7 @@ export function FieldRoleBadge({
   const text = role === "dimension" ? "D" : role === "indicator" ? "I" : "—"
   const roleLabel = role ? label(`field.role.${role}`) : label("field.role.unmarkable")
   const defaultLabel = defaultRole ? label(`field.role.${defaultRole}`) : label("field.role.unmarkable")
+  const shortExplanation = role === "dimension" ? `D = ${label("field.role.dimension")}` : role === "indicator" ? `I = ${label("field.role.indicator")}` : ""
   const className = role
     ? isOverridden
       ? role === "dimension"
@@ -33,8 +34,10 @@ export function FieldRoleBadge({
     <button
       type="button"
       disabled={!role}
-      aria-label={`${label("field.role.current")}：${roleLabel}`}
-      title={`${label("field.role.current")}：${roleLabel} · ${label("field.role.default")}：${defaultLabel}${isOverridden ? ` · ${label("field.role.overridden")}` : ""}`}
+      aria-label={shortExplanation || label("field.role.unmarkable")}
+      title={shortExplanation
+        ? `${shortExplanation} · ${label("field.role.current")}：${roleLabel} · ${label("field.role.default")}：${defaultLabel}${isOverridden ? ` · ${label("field.role.overridden")}` : ""}`
+        : label("field.role.unmarkable")}
       onClick={onToggle}
       onContextMenu={onOpenMenu}
       className={`h-4 min-w-4 rounded border px-1 text-[9px] leading-3 shrink-0 ${className}`}

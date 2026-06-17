@@ -5,7 +5,7 @@ import { X, Plus } from "lucide-react"
 import { useLang } from "@/components/lang-provider"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useDashboardsStore, type DashboardFilter } from "@/stores/dashboards"
-import { buildDistinctFilterValuesSQL } from "@/lib/pivot-sql"
+import { buildDistinctFilterValuesSQL } from "@/lib/sql-utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 

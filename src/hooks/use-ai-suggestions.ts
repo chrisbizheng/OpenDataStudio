@@ -4,7 +4,7 @@ import { useCallback, useState } from "react"
 import { useLlmStore } from "@/stores/llm-config"
 import { fetchAgentDirections, fetchAgentQuestions } from "@/lib/agent-client"
 import { suggestQuestions } from "@/lib/suggestions"
-import type { Message } from "@/lib/agent-types"
+import type { AssistantMessage } from "@/lib/agent-types"
 import type { DeepDiveItem } from "@/lib/deep-dive-directions"
 
 interface UseAiSuggestionsParams {
@@ -31,7 +31,7 @@ export function useAiSuggestions({
   const [isGeneratingFollowUpQuestions, setIsGeneratingFollowUpQuestions] = useState(false)
 
   const generateAiDirections = useCallback(async (
-    msg: Message,
+    msg: AssistantMessage,
     item: DeepDiveItem,
     localDirections: { label: string; prompt: string }[]
   ) => {

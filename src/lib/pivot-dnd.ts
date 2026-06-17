@@ -1,4 +1,4 @@
-import type { FieldRole } from "./field-role"
+import type { FieldRole } from "./column-type-classifier"
 
 export type PivotDropZone = "filters" | "rows" | "columns" | "indicators"
 

@@ -1,4 +1,5 @@
-import { unwrapNullable, isMetricColumn } from "@/lib/column-utils"
+import { unwrapNullable } from "@/lib/column-type-classifier"
+import { isMetricColumn } from "@/lib/column-utils"
 
 export function renderValue(value: unknown, type?: string, columnName?: string): React.ReactNode {
   if (value === null || value === undefined) {

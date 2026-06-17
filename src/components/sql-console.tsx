@@ -7,8 +7,8 @@ import { sql, keywordCompletionSource } from "@codemirror/lang-sql"
 import { autocompletion, acceptCompletion, moveCompletionSelection } from "@codemirror/autocomplete"
 import { keymap } from "@codemirror/view"
 import { vscodeDark, vscodeLight } from "@/lib/vscode-theme-override"
-import { ClickHouse } from "@/lib/ch-dialect"
-import { createChCompletionSource } from "@/lib/ch-completion"
+import { ClickHouseDialect, createChCompletionSource } from "@/lib/sql-editor-support"
+import type { ColumnMeta } from "@/lib/types"
 
 interface SqlConsoleProps {
   sql: string
@@ -18,6 +18,7 @@ interface SqlConsoleProps {
   isExecuting: boolean
   tableName?: string | null
   selectedDatabase?: string | null
+  schema?: ColumnMeta[]
 }
 
 export function SqlConsole({
@@ -28,6 +29,7 @@ export function SqlConsole({
   isExecuting,
   tableName,
   selectedDatabase,
+  schema,
 }: SqlConsoleProps) {
   const { _t } = useLang()
 
@@ -61,18 +63,18 @@ export function SqlConsole({
         all: tableName && selectedDatabase ? [{ db: selectedDatabase, table: tableName }] : [],
       },
       tablesForDb: () => tableName ? [tableName] : [],
-      columnsFor: () => [],
+      columnsFor: (_db, table) => (table === tableName ? (schema ?? []) : []),
     }),
-    [selectedDatabase, tableName]
+    [selectedDatabase, tableName, schema]
   )
 
   const extensions = useMemo(() => [
-    sql({ dialect: ClickHouse }),
+    sql({ dialect: ClickHouseDialect }),
     autocompletion({
       activateOnTyping: true,
       override: [
         completionSource,
-        keywordCompletionSource(ClickHouse, true),
+        keywordCompletionSource(ClickHouseDialect, true),
       ],
     }),
     keymap.of([

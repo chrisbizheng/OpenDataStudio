@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
 import { parseLlmConfigFromHeader, callLlm } from "@/lib/llm-client"
+import { getTraceId } from "@/lib/trace-id"
 
 interface AgentRouteConfig<TBody> {
   buildSystemPrompt: (lang: "zh" | "en") => string
@@ -15,7 +16,7 @@ export async function handleAgentRoute<TBody>(
   request: NextRequest,
   config: AgentRouteConfig<TBody>
 ): Promise<NextResponse> {
-  const traceId = request.headers.get("x-trace-id") || crypto.randomUUID()
+  const traceId = getTraceId(request)
   const log = logger.child({ traceId })
 
   try {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useDraggable } from "@dnd-kit/core"
-import type { FieldRole } from "@/lib/field-role"
+import type { FieldRole } from "@/lib/column-type-classifier"
 import type { ReactNode } from "react"
 
 export function SchemaFieldDraggable({

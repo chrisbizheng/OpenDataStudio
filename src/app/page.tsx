@@ -15,6 +15,7 @@ import { SettingsDialog } from "@/components/settings-panel"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { DataProvider } from "@/components/data-provider"
 import { useLang } from "@/components/lang-provider"
+import { Database } from "lucide-react"
 import { useUiStore } from "@/stores/ui"
 import { ResizeHandle } from "@/components/resize-handle"
 import { useQueryOrchestrator } from "@/hooks/use-query-orchestrator"
@@ -60,8 +61,11 @@ function HomeContent() {
     error,
     sort,
     searchQuery,
+    sql,
+    pendingAutoExecute,
     loadedRows,
     setSearchQuery,
+    setPendingAutoExecute,
     loadMore,
     handleSort,
     handleSqlExecute,
@@ -169,12 +173,15 @@ function HomeContent() {
                       selectedDatabase={selectedDatabase}
                       sort={sort}
                       searchQuery={searchQuery}
+                      sql={sql}
+                      pendingAutoExecute={pendingAutoExecute}
                       loadedRows={loadedRows}
                       onSort={handleSort}
                       onSearchChange={setSearchQuery}
                       onLoadMore={loadMore}
                       onExecuteSql={handleSqlExecute}
                       onSqlGenerated={handleAgentSqlGenerated}
+                      onSetPendingAutoExecute={setPendingAutoExecute}
                     />
                   ) : selectedTable && selectedDatabase ? (
                     <PivotView
@@ -191,11 +198,15 @@ function HomeContent() {
                 ) : (
                   <div className="flex-1 flex items-center justify-center">
                     <div className="text-center">
+                      <Database className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
                       <h2 className="text-lg font-medium text-muted-foreground mb-1">
                         Open Data Studio
                       </h2>
                       <p className="text-sm text-muted-foreground/60">
                         {_t("main.select_table")}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {_t("main.select_hint")}
                       </p>
                     </div>
                   </div>

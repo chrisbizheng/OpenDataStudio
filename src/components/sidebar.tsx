@@ -1,17 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useFieldRoleStore } from "@/stores/field-role"
 import { useLang } from "@/components/lang-provider"
 import { formatRowCount } from "@/lib/format"
-import { resolveFieldRole, getNextFieldRole, createFieldRoleKey, type FieldRole } from "@/lib/field-role"
+import { unwrapNullable, resolveFieldRole, getNextFieldRole, createFieldRoleKey, type FieldRole } from "@/lib/column-type-classifier"
 import { useCatalog } from "@/hooks/use-catalog"
 import { SchemaFieldDraggable } from "./schema-field-draggable"
 import { FieldRoleBadge } from "./field-role-badge"
+import { Search } from "lucide-react"
+
+/** Extract the longest common prefix shared by >50% of table names, ending at underscore */
+function extractCommonPrefix(names: string[]): string | null {
+  if (names.length < 2) return null
+  const sorted = [...names].sort()
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  let i = 0
+  while (i < first.length && first[i] === last[i]) i++
+  if (i === 0) return null
+  const prefix = first.slice(0, i)
+  // Only count prefix if >50% of tables share it
+  const matchCount = names.filter(n => n.startsWith(prefix)).length
+  if (matchCount / names.length <= 0.5) return null
+  // Find last underscore in prefix to keep meaningful group names
+  const lastUnderscore = prefix.lastIndexOf("_")
+  if (lastUnderscore > 0) return prefix.slice(0, lastUnderscore + 1)
+  return prefix
+}
 
 export function Sidebar() {
   const { _t } = useLang()
@@ -39,23 +60,43 @@ export function Sidebar() {
 
   const [schemaHeight, setSchemaHeight] = useState(384)
 
+  // P1-8: Table search
+  const [tableSearch, setTableSearch] = useState("")
+
+  // P1-9: Common prefix detection
+  const tableNames = useMemo(() => tables.map(t => t.name), [tables])
+  const commonPrefix = useMemo(() => extractCommonPrefix(tableNames), [tableNames])
+
+  const filteredTables = useMemo(() => {
+    if (!tableSearch.trim()) return tables
+    const q = tableSearch.toLowerCase()
+    return tables.filter(t => t.name.toLowerCase().includes(q))
+  }, [tables, tableSearch])
+
+  const displayPrefix = tableSearch.trim() ? null : commonPrefix
+
   return (
     <div className="flex flex-col h-full border-r border-border bg-muted/30">
       <div className="px-3 py-2 border-b border-border space-y-2">
         {databases.length > 0 && (
           <>
-            <select
-              value={selectedDatabase}
-              onChange={(e) => selectDatabase(e.target.value)}
-              aria-label="Database"
-              className="w-full text-xs rounded border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-ring"
-            >
-              {databases.map((db) => (
-                <option key={db.name} value={db.name}>
-                  {db.name}
-                </option>
-              ))}
-            </select>
+            <Tooltip>
+              <TooltipTrigger className="w-full" render={<span />}>
+                <select
+                  value={selectedDatabase}
+                  onChange={(e) => selectDatabase(e.target.value)}
+                  aria-label="Database"
+                  className="w-full text-xs rounded border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-ring truncate"
+                >
+                  {databases.map((db) => (
+                    <option key={db.name} value={db.name} title={db.name}>
+                      {db.name}
+                    </option>
+                  ))}
+                </select>
+              </TooltipTrigger>
+              <TooltipContent side="right">{selectedDatabase}</TooltipContent>
+            </Tooltip>
             {databases.find((d) => d.name === selectedDatabase)?.comment && (
               <div className="text-[10px] text-muted-foreground/80 leading-relaxed px-0.5">
                 {_t("schema.data_source")}：{databases.find((d) => d.name === selectedDatabase)!.comment}
@@ -67,6 +108,23 @@ export function Sidebar() {
           {_t("sidebar.tables")}
         </h2>
       </div>
+
+      {/* P1-8: Search input */}
+      {tables.length > 0 && (
+        <div className="px-3 py-1.5 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+            <Input
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder={_t("sidebar.search_tables")}
+              className="h-7 text-xs pl-7 pr-2"
+              aria-label={_t("sidebar.search_tables")}
+            />
+          </div>
+        </div>
+      )}
+
       <ScrollArea className="flex-1 min-h-0">
         {isLoading && tables.length === 0 ? (
           <div className="p-3 space-y-2">
@@ -76,42 +134,58 @@ export function Sidebar() {
           </div>
         ) : error ? (
           <div className="p-3 text-sm text-destructive">{error}</div>
-        ) : tables.length === 0 ? (
+        ) : filteredTables.length === 0 ? (
+          /* P0-3: Use text-muted-foreground for proper contrast */
           <div className="p-3 text-sm text-muted-foreground">
             {_t("sidebar.no_tables")}
           </div>
         ) : (
           <div className="p-1.5 space-y-0.5">
-            {tables.map((table) => (
-              <Tooltip key={table.name}>
-                <TooltipTrigger className="w-full" render={<span />}>
-                  <Button
-                    variant={
-                      selectedTable === table.name ? "secondary" : "ghost"
-                    }
-                    size="sm"
-                    className="w-full flex-col items-start text-xs font-normal h-auto min-h-8 py-1.5 px-2 pointer-events-auto"
-                    onClick={() => selectTable(table.name)}
-                  >
-                    <div className="w-full flex items-center gap-1">
-                      <span className="truncate">{table.name}</span>
-                      <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
-                        {formatRowCount(table.rowCount)}
-                      </span>
-                    </div>
-                    {table.comment && (
-                      <span className="text-[10px] text-muted-foreground/60 italic leading-tight truncate w-full">
-                        {table.comment}
-                      </span>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {table.engine} · {formatRowCount(table.rowCount)}行
-                  {table.comment && <> · {table.comment}</>}
-                </TooltipContent>
-              </Tooltip>
-            ))}
+            {/* P1-9: Show common prefix as group header */}
+            {displayPrefix && (
+              <div className="px-2 py-1 text-[10px] font-mono text-muted-foreground/60 uppercase tracking-wide select-none">
+                {displayPrefix}
+              </div>
+            )}
+            {filteredTables.map((table) => {
+              // P1-9: Strip prefix for display
+              const displayName = displayPrefix && table.name.startsWith(displayPrefix)
+                ? table.name.slice(displayPrefix.length)
+                : table.name
+
+              return (
+                <Tooltip key={table.name}>
+                  <TooltipTrigger className="w-full" render={<span />}>
+                    <Button
+                      variant={
+                        selectedTable === table.name ? "secondary" : "ghost"
+                      }
+                      size="sm"
+                      className="w-full flex-col items-start text-xs font-normal h-auto min-h-8 py-1.5 px-2 pointer-events-auto"
+                      onClick={() => selectTable(table.name)}
+                    >
+                      <div className="w-full flex items-center gap-1">
+                        {/* P0-6: truncated text with title fallback */}
+                        <span className="truncate" title={table.name}>{displayName}</span>
+                        <span className="text-muted-foreground ml-auto shrink-0 tabular-nums">
+                          {formatRowCount(table.rowCount)}
+                        </span>
+                      </div>
+                      {table.comment && (
+                        <span className="text-[10px] text-muted-foreground/60 italic leading-tight truncate w-full" title={table.comment}>
+                          {table.comment}
+                        </span>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {/* P1-9: Tooltip shows FULL name */}
+                    {table.name} · {table.engine} · {formatRowCount(table.rowCount)}行
+                    {table.comment && <> · {table.comment}</>}
+                  </TooltipContent>
+                </Tooltip>
+              )
+            })}
           </div>
         )}
       </ScrollArea>
@@ -143,14 +217,15 @@ export function Sidebar() {
             {tableMeta && (
               <div className="shrink-0">
                 <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground px-3 py-1.5 border-b border-border/50">
-                  <span className="font-mono font-medium text-foreground truncate">{tableMeta.name}</span>
+                  {/* P0-6: title on truncated table name */}
+                  <span className="font-mono font-medium text-foreground truncate" title={tableMeta.name}>{tableMeta.name}</span>
                   <span>·</span>
                   <span className="font-mono shrink-0">{tableMeta.engine}</span>
                   <span>·</span>
                   <span className="shrink-0">{formatRowCount(tableMeta.rowCount)}行</span>
                 </div>
                 {tableMeta.comment && (
-                  <div className="text-[10px] text-muted-foreground/70 italic leading-tight px-3 py-1 border-b border-border/30">
+                  <div className="text-[10px] text-muted-foreground/70 italic leading-tight px-3 py-1 border-b border-border/30" title={tableMeta.comment}>
                     {tableMeta.comment}
                   </div>
                 )}
@@ -176,17 +251,22 @@ export function Sidebar() {
                           disabled={!resolvedRole}
                           label={`${_t("field.role.drag")} ${col.name}`}
                         >
-                          <span className="font-medium truncate">{col.name}</span>
+                          {/* P0-6: title on truncated field name */}
+                          <span className="font-medium truncate" title={col.name}>{col.name}</span>
                           {col.comment && (
-                            <span className="text-[10px] text-muted-foreground/60 italic truncate min-w-0">
+                            <span className="text-[10px] text-muted-foreground/60 italic truncate min-w-0" title={col.comment}>
                               {col.comment}
                             </span>
                           )}
                           <span className="text-muted-foreground font-mono text-[10px] ml-auto shrink-0">
-                            {col.type.replace(/^Nullable\((.+)\)$/, "$1")}
+                            {unwrapNullable(col.type)}
                           </span>
-                          {col.type.startsWith("Nullable(") && (
-                            <span className="text-[10px] text-destructive/70 shrink-0">nullable</span>
+                          {/* P0-4: Nullable as neutral badge with dot, not red */}
+                          {col.type !== unwrapNullable(col.type) && (
+                            <span className="text-[10px] text-muted-foreground shrink-0 inline-flex items-center gap-0.5">
+                              <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/50" />
+                              {_t("sidebar.nullable")}
+                            </span>
                           )}
                           <FieldRoleBadge
                             role={resolvedRole?.role ?? null}
@@ -216,10 +296,13 @@ export function Sidebar() {
                         {col.name}
                         {col.comment && <> · {col.comment}</>}
                         <span className="text-muted-foreground font-mono ml-1">
-                          {col.type.replace(/^Nullable\((.+)\)$/, "$1")}
+                          {unwrapNullable(col.type)}
                         </span>
-                        {col.type.startsWith("Nullable(") && (
-                          <span className="text-destructive/70 ml-0.5">nullable</span>
+                        {/* P0-4: Nullable in tooltip also neutral */}
+                        {col.type !== unwrapNullable(col.type) && (
+                          <span className="text-muted-foreground ml-0.5">
+                            · {_t("sidebar.nullable")}
+                          </span>
                         )}
                         {resolvedRole && (
                           <span className="ml-1">

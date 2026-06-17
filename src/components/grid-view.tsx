@@ -1,16 +1,14 @@
 "use client"
 
-import { useCallback, useDeferredValue, useState, useMemo, useEffect, startTransition } from "react"
+import { useCallback, useState, useEffect, startTransition } from "react"
 import { DataGrid } from "@/components/data-grid"
 import { SqlConsole } from "@/components/sql-console"
 import { QueryPanels } from "@/components/query-panels"
-import { createGridFilter } from "@/lib/grid-filter"
 import { exportData } from "@/lib/export"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
-import { useQueryStore } from "@/stores/query"
 import { useLang } from "@/components/lang-provider"
 import type { ColumnMeta } from "@/lib/types"
-import type { TableData } from "@/stores/query"
+import type { TableData } from "@/lib/query-lifecycle"
 
 interface GridViewProps {
   data: TableData | null
@@ -21,12 +19,15 @@ interface GridViewProps {
   selectedDatabase: string | null
   sort: { column: string | null; direction: "asc" | "desc" | null }
   searchQuery: string
+  sql: string
+  pendingAutoExecute: string | null
   loadedRows: number
   onSort: (column: string) => void
   onSearchChange: (query: string) => void
   onLoadMore: () => void
   onExecuteSql: (sql: string) => void
   onSqlGenerated: (sql: string) => void
+  onSetPendingAutoExecute: (sql: string | null) => void
 }
 
 export function GridView({
@@ -38,35 +39,28 @@ export function GridView({
   selectedDatabase,
   sort,
   searchQuery,
+  sql,
+  pendingAutoExecute,
   loadedRows,
   onSort,
   onSearchChange,
   onLoadMore,
   onExecuteSql,
   onSqlGenerated,
+  onSetPendingAutoExecute,
 }: GridViewProps) {
   const { _t } = useLang()
   const [sqlText, setSqlText] = useState("")
 
-  const storeSql = useQueryStore((s) => s.sql)
-  const pendingAutoExecute = useQueryStore((s) => s.pendingAutoExecute)
-  const setPendingAutoExecute = useQueryStore((s) => s.setPendingAutoExecute)
   useEffect(() => {
-    if (storeSql) startTransition(() => setSqlText(storeSql))
-  }, [storeSql])
+    if (sql) startTransition(() => setSqlText(sql))
+  }, [sql])
   useEffect(() => {
     if (pendingAutoExecute) {
       onExecuteSql(pendingAutoExecute)
-      setPendingAutoExecute(null)
+      onSetPendingAutoExecute(null)
     }
-  }, [pendingAutoExecute, onExecuteSql, setPendingAutoExecute])
-
-  const deferredSearch = useDeferredValue(searchQuery)
-  const gridFilter = useMemo(() => createGridFilter(), [])
-  const filteredRows = useMemo(
-    () => data ? gridFilter(data.rows, deferredSearch) : [],
-    [data, deferredSearch, gridFilter]
-  )
+  }, [pendingAutoExecute, onExecuteSql, onSetPendingAutoExecute])
 
   const handleCopyCsv = useCallback(() => {
     if (!data || !selectedTable) return
@@ -116,6 +110,7 @@ export function GridView({
           isExecuting={isExecuting}
           tableName={selectedTable}
           selectedDatabase={selectedDatabase}
+          schema={schema}
         />
         <div className="shrink-0">
           <QueryPanels onSelectSql={handleSelectSavedSql} />
@@ -129,7 +124,7 @@ export function GridView({
         ) : data ? (
           <DataGrid
             columns={data.columns}
-            rows={filteredRows}
+            rows={data.rows}
             schema={schema}
             selectedTable={selectedTable ?? ""}
             sortColumn={sort.column}

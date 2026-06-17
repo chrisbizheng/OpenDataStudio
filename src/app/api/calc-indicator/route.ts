@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
 import { parseLlmConfigFromHeader, callLlm } from "@/lib/llm-client"
 import { buildCalcIndicatorSystemPrompt } from "@/lib/prompts/calc-indicator"
+import { getTraceId } from "@/lib/trace-id"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
-  const traceId = request.headers.get("x-trace-id") || crypto.randomUUID()
+  const traceId = getTraceId(request)
   const log = logger.child({ traceId })
 
   try {

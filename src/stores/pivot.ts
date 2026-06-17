@@ -4,25 +4,6 @@ import { type PivotConfig, type PivotIndicator, type CalculatedIndicator, type F
 import { validate } from "@/lib/expression"
 import { migratePivotPersisted } from "./migrate-pivot-store"
 
-const AGG_SUFFIXES: Record<string, string> = {
-  _distinct_count: "DISTINCT_COUNT",
-  _sum: "SUM",
-  _avg: "AVG",
-  _count: "COUNT",
-  _min: "MIN",
-  _max: "MAX",
-}
-
-export function migrateIndicatorKey(oldKey: string): string | null {
-  for (const [suffix, agg] of Object.entries(AGG_SUFFIXES)) {
-    if (oldKey.endsWith(suffix)) {
-      const field = oldKey.slice(0, -suffix.length)
-      if (field) return `${field}-${agg}`
-    }
-  }
-  return null
-}
-
 export interface PivotResult {
   columns: string[]
   rows: unknown[][]

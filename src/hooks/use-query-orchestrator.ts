@@ -1,163 +1,82 @@
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { useQueryStore } from "@/stores/query"
 import { useDatasetStore } from "@/stores/dataset"
 import { useSqlHistoryStore } from "@/stores/sql-history"
 import { usePivotStore } from "@/stores/pivot"
-import { inferStableOrder } from "@/lib/stable-result-order"
-import { buildSelectSql, buildDrilldownSql, buildSortDirection } from "@/lib/query-builder"
 import { useData } from "@/components/data-provider"
-import { pageData } from "@/hooks/use-catalog"
+import { pageData } from "@/lib/catalog"
+import type { QueryLifecycleState } from "@/lib/query-lifecycle"
 import type { ColumnMeta } from "@/lib/types"
 
+const EMPTY_SCHEMA: ColumnMeta[] = []
+
+const initialState: QueryLifecycleState = {
+  status: "idle",
+  currentTable: null,
+  currentSchema: [],
+  data: null,
+  error: null,
+  sort: { column: null, direction: null },
+  searchQuery: "",
+  sql: "",
+  loadedRows: 0,
+  pendingAutoExecute: null,
+}
+
 export function useQueryOrchestrator() {
-  const { catalog, queryEngine } = useData()
+  const { catalog, queryEngine, queryLifecycle } = useData()
 
   const { selectedTable, selectedDatabase } = useDatasetStore(useShallow((s) => ({
     selectedTable: s.selectedTable,
     selectedDatabase: s.selectedDatabase,
   })))
 
-  const schema: ColumnMeta[] = (() => {
-    if (!selectedDatabase || !selectedTable) return []
-    const page = catalog.getSchema(selectedDatabase, selectedTable)
-    return pageData(page) ?? []
-  })()
+  const catalogVersion = useSyncExternalStore(
+    (cb) => catalog.subscribe(cb),
+    () => catalog.version,
+    () => 0
+  )
 
-  const {
-    data,
-    isExecuting,
-    error,
-    sort,
-    searchQuery,
-    loadedRows,
-    setCurrentTable,
-    setCurrentSchema,
-    setData,
-    setExecuting,
-    setError,
-    setSort,
-    setSearchQuery,
-    setLoadedRows,
-  } = useQueryStore(useShallow((s) => ({
-    data: s.data,
-    isExecuting: s.isExecuting,
-    error: s.error,
-    sort: s.sort,
-    searchQuery: s.searchQuery,
-    loadedRows: s.loadedRows,
-    setCurrentTable: s.setCurrentTable,
-    setCurrentSchema: s.setCurrentSchema,
-    setData: s.setData,
-    setExecuting: s.setExecuting,
-    setError: s.setError,
-    setSort: s.setSort,
-    setSearchQuery: s.setSearchQuery,
-    setLoadedRows: s.setLoadedRows,
-  })))
+  const schema = useMemo(() => {
+    if (!selectedDatabase || !selectedTable) return EMPTY_SCHEMA
+    const page = catalog.getSchema(selectedDatabase, selectedTable)
+    return pageData(page) ?? EMPTY_SCHEMA
+  }, [selectedDatabase, selectedTable, catalog, catalogVersion])
+
+  const state = useSyncExternalStore(
+    (cb) => queryLifecycle.subscribe(cb),
+    () => queryLifecycle.state,
+    () => initialState
+  )
 
   const addEntry = useSqlHistoryStore((s) => s.addEntry)
   const resetPivot = usePivotStore((s) => s.reset)
 
-  const executeQuery = useCallback(async (
-    sql: string,
-    tableName: string,
-    append = false
-  ) => {
-    if (!append) {
-      setExecuting(true)
-      setError(null)
-      setCurrentTable(tableName)
-    } else {
-      setExecuting(true)
-      setError(null)
-    }
-
-    try {
-      const json = await queryEngine.execute(sql, undefined)
-      if (!json) return
-
-      if (append && useQueryStore.getState().data) {
-        const state = useQueryStore.getState()
-        const merged = [...(state.data?.rows ?? []), ...json.rows]
-        setData({ ...state.data!, rows: merged })
-        setLoadedRows(merged.length)
-        setExecuting(false)
-      } else {
-        setData(json)
-        setLoadedRows(json.rows.length)
-        setExecuting(false)
-        setError(null)
-      }
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return
-      setError(e instanceof Error ? e.message : "Network error")
-      setExecuting(false)
-    }
-  }, [queryEngine, setCurrentTable, setExecuting, setError, setData, setLoadedRows])
-
-  const loadMore = useCallback(async () => {
-    const { currentTable, currentSchema } = useQueryStore.getState()
-    if (!currentTable) return
-    const db = currentTable.split(".")[0] || ""
-    const table = currentTable.split(".")[1] || currentTable
-    inferStableOrder(currentSchema)
-    const sql = buildSelectSql(db, table, undefined)
-    await executeQuery(sql, currentTable, true)
-  }, [executeQuery])
-
-  const buildDefaultTableSql = useCallback(() => {
-    if (!selectedDatabase || !selectedTable) return ""
-    const stableOrder = inferStableOrder(schema)
-    return buildSelectSql(
-      selectedDatabase,
-      selectedTable,
-      stableOrder
-        ? { orderBy: stableOrder.field, direction: stableOrder.direction }
-        : undefined
-    )
-  }, [schema, selectedDatabase, selectedTable])
-
   useEffect(() => {
-    setCurrentSchema(schema)
-  }, [schema, setCurrentSchema])
+    queryLifecycle.setCurrentSchema(schema)
+  }, [schema, queryLifecycle])
 
   useEffect(() => {
     if (selectedTable && selectedDatabase) {
-      executeQuery(buildDefaultTableSql(), `${selectedDatabase}.${selectedTable}`)
+      queryLifecycle.executeDefaultTable(selectedDatabase, selectedTable, schema)
     }
     resetPivot()
-  }, [selectedTable, selectedDatabase, executeQuery, resetPivot, buildDefaultTableSql])
+  }, [selectedTable, selectedDatabase, queryLifecycle, resetPivot, schema])
 
   const handleSort = useCallback(
     (column: string) => {
       if (!selectedTable || !selectedDatabase) return
-      const newDir = buildSortDirection(sort.column, sort.direction, column)
-      setSort({ column, direction: newDir })
-      if (newDir) {
-        executeQuery(
-          buildSelectSql(selectedDatabase, selectedTable, {
-            orderBy: column,
-            direction: newDir.toUpperCase() as "ASC" | "DESC",
-          }),
-          `${selectedDatabase}.${selectedTable}`
-        )
-      } else {
-        executeQuery(
-          buildDefaultTableSql(),
-          `${selectedDatabase}.${selectedTable}`
-        )
-      }
+      queryLifecycle.sort(column, selectedDatabase, selectedTable, schema)
     },
-    [selectedTable, selectedDatabase, sort, executeQuery, setSort, buildDefaultTableSql]
+    [selectedTable, selectedDatabase, queryLifecycle, schema]
   )
 
   const handleSqlExecute = useCallback(
     async (sql: string) => {
       const start = performance.now()
-      await executeQuery(sql, selectedTable ?? "")
+      await queryLifecycle.execute(sql, selectedTable ?? "")
       const elapsed = (performance.now() - start) / 1000
-      const currentData = useQueryStore.getState().data
+      const currentData = queryLifecycle.state.data
       addEntry({
         sql,
         tableName: selectedTable,
@@ -165,7 +84,7 @@ export function useQueryOrchestrator() {
         rowCount: currentData?.rows.length ?? 0,
       })
     },
-    [selectedTable, executeQuery, addEntry]
+    [selectedTable, queryLifecycle, addEntry]
   )
 
   const handleDrilldown = useCallback(
@@ -175,11 +94,8 @@ export function useQueryOrchestrator() {
     }) => {
       if (!selectedTable || !selectedDatabase)
         return { columns: [] as string[], rows: [] as unknown[][], isLoading: false }
-      const sql = buildDrilldownSql(
-        selectedDatabase,
-        selectedTable,
-        params.dimensionValues
-      )
+      const { buildDrilldownSql } = await import("@/lib/query-builder")
+      const sql = buildDrilldownSql(selectedDatabase, selectedTable, params.dimensionValues)
       try {
         const json = await queryEngine.execute(sql, selectedDatabase)
         if (!json) return { columns: [] as string[], rows: [] as unknown[][], isLoading: false }
@@ -191,19 +107,34 @@ export function useQueryOrchestrator() {
     [selectedTable, selectedDatabase, queryEngine]
   )
 
+  const setSearchQuery = useCallback(
+    (q: string) => queryLifecycle.setSearchQuery(q),
+    [queryLifecycle]
+  )
+
+  const loadMore = useCallback(
+    () => queryLifecycle.loadMore(),
+    [queryLifecycle]
+  )
+
+  const filteredRows = queryLifecycle.getFilteredRows()
+
   return {
     selectedTable,
     schema,
     selectedDatabase,
-    data,
-    isExecuting,
-    error,
-    sort,
-    searchQuery,
-    loadedRows,
-    executeQuery,
-    setSort,
+    data: state.data ? { ...state.data, rows: filteredRows } : null,
+    isExecuting: state.status === "executing",
+    error: state.error,
+    sort: state.sort,
+    searchQuery: state.searchQuery,
+    sql: state.sql,
+    pendingAutoExecute: state.pendingAutoExecute,
+    loadedRows: state.loadedRows,
+    executeQuery: (sql: string, tableName: string) => queryLifecycle.execute(sql, tableName),
+    setSort: (sort: { column: string | null; direction: "asc" | "desc" | null }) => queryLifecycle.setSort(sort),
     setSearchQuery,
+    setPendingAutoExecute: (sql: string | null) => queryLifecycle.setPendingAutoExecute(sql),
     loadMore,
     handleSort,
     handleSqlExecute,

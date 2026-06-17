@@ -1,24 +1,25 @@
 import { isMetricColumn } from "./column-utils"
-import type { RawViz } from "./agent-types"
+import type { RawViz, VisualizationConfig } from "./agent-types"
 
 export function fixVisualization(
   rawViz: RawViz,
   columns: string[]
-): RawViz {
-  if (!rawViz || !rawViz.config) return rawViz
-  if (!columns || columns.length === 0) return rawViz
+): VisualizationConfig | null {
+  if (!rawViz || !rawViz.type || !rawViz.config) return null
+  if (!columns || columns.length === 0) return null
 
   const cfg = rawViz.config
+  const type = rawViz.type
 
   // Validate series if present
   if (cfg.series && cfg.series.length > 0) {
     const validSeries = cfg.series.filter((s) => columns.includes(s.yKey))
     if (validSeries.length === 0) {
       // All series invalid — fall back to auto-detect
-      const numericCol = columns.find((c) => isMetricColumn(c)) || columns[columns.length - 1]
-      const labelCol = columns.find((c) => c !== numericCol) || columns[0]
+      const numericCol = columns.find((c) => isMetricColumn(c)) || columns[columns.length - 1]!
+      const labelCol = columns.find((c) => c !== numericCol) || columns[0]!
       return {
-        ...rawViz,
+        type,
         config: {
           xKey: cfg.xKey && columns.includes(cfg.xKey) ? cfg.xKey : labelCol,
           yKey: numericCol,
@@ -28,11 +29,12 @@ export function fixVisualization(
       }
     }
     const xOk = cfg.xKey && columns.includes(cfg.xKey)
+    const fallbackX = columns.find((c) => !validSeries.some((s) => s.yKey === c)) || columns[0]!
     return {
-      ...rawViz,
+      type,
       config: {
         ...cfg,
-        xKey: xOk ? cfg.xKey : columns.find((c) => !validSeries.some((s) => s.yKey === c)) || columns[0],
+        xKey: xOk ? cfg.xKey! : fallbackX,
         series: validSeries,
       },
     }
@@ -41,15 +43,27 @@ export function fixVisualization(
   // Single yKey validation (original logic)
   const xOk = cfg.xKey && columns.includes(cfg.xKey)
   const yOk = cfg.yKey && columns.includes(cfg.yKey)
-  if (xOk && yOk) return rawViz
+  if (xOk && yOk) {
+    return {
+      type,
+      config: {
+        xKey: cfg.xKey!,
+        yKey: cfg.yKey,
+        series: cfg.series,
+        title: cfg.title,
+        showLegend: cfg.showLegend,
+        height: cfg.height,
+      },
+    }
+  }
 
   const numericCol = columns.find((c) =>
     c === cfg.yKey || isMetricColumn(c)
-  ) || columns[columns.length - 1]
-  const labelCol = columns.find((c) => c !== numericCol) || columns[0]
+  ) || columns[columns.length - 1]!
+  const labelCol = columns.find((c) => c !== numericCol) || columns[0]!
 
   return {
-    ...rawViz,
+    type,
     config: {
       xKey: cfg.xKey || labelCol,
       yKey: cfg.yKey || numericCol,
@@ -62,7 +76,7 @@ export function fixVisualization(
 export function inferVisualization(
   sql: string,
   columns: string[]
-): RawViz {
+): VisualizationConfig | null {
   if (!columns || columns.length < 2) return null
 
   const groupMatch = sql.match(/\bGROUP\s+BY\b\s+([\s\S]+?)(?:\bORDER\b|\bLIMIT\b|\bHAVING\b|\bUNION\b|$)/i)
@@ -103,19 +117,4 @@ export function inferVisualization(
       showLegend: groupCols.length > 1,
     },
   }
-}
-
-export function fixConcatSql(sql: string): string | null {
-  if (!/\bconcat\s*\(/i.test(sql)) return null
-  const groupMatch = sql.match(/\bGROUP\s+BY\b\s+([\s\S]+?)(?:\bORDER\b|\bLIMIT\b|\bHAVING\b|\bUNION\b|$)/i)
-  if (!groupMatch) return null
-  const groupCols = groupMatch[1].split(",").map((c) => c.trim().replace(/^`|`$/g, "").replace(/\s+AS\s+\S+$/i, "").trim()).filter(Boolean)
-  if (groupCols.length < 2) return null
-  const selectMatch = sql.match(/\bSELECT\b\s+([\s\S]+?)\s+\bFROM\b/i)
-  if (!selectMatch) return null
-  const selectBody = selectMatch[1]
-  const concatMatch = selectBody.match(/\bconcat\s*\([^)]+\)\s+AS\s+(\w+)/i)
-  if (!concatMatch) return null
-  const newSelect = selectBody.replace(concatMatch[0], groupCols.join(", "))
-  return sql.replace(selectBody, newSelect)
 }

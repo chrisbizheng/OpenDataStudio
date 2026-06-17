@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest"
 import { usePivotStore } from "../pivot"
-import { buildPivotIndicatorTitle } from "@/lib/pivot-sql"
+import { buildPivotIndicatorTitle } from "@/lib/pivot-client-utils"
 
 describe("usePivotStore", () => {
   beforeEach(() => {

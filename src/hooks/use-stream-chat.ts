@@ -3,9 +3,8 @@
 import { useCallback, useRef, useState } from "react"
 import { useLlmStore } from "@/stores/llm-config"
 import { appLog, getTraceId } from "@/lib/client-logger"
-import { processStream } from "@/lib/agent-stream"
-import { buildAgentHeaders } from "@/lib/agent-client"
-import type { Message, MessageUIState } from "@/lib/agent-types"
+import { runChatSession, type ChatEvent } from "@/lib/agent-chat-session"
+import type { AssistantMessage, Message, MessageUIState } from "@/lib/agent-types"
 
 interface UseStreamChatParams {
   lang: "zh" | "en"
@@ -45,7 +44,7 @@ export function useStreamChat({
     const userMsg: Message = { role: "user", content: text }
     const updated = [...prevMessages, userMsg]
     const placeholderIndex = updated.length
-    const initialMessages = [...updated, { role: "assistant" as const, content: "" }]
+    const initialMessages: Message[] = [...updated, { role: "assistant", content: "" }]
 
     onMessagesChange(initialMessages)
     onMessageUIChange((prev) => {
@@ -82,56 +81,82 @@ export function useStreamChat({
       const controller = new AbortController()
       abortRef.current = controller
 
-      const res = await fetch("/api/agent/chat", {
-        method: "POST",
-        signal: controller.signal,
-        headers: buildAgentHeaders(currentLlmConfig, traceId),
-        body: JSON.stringify({
-          lang,
-          messages: updated.map((m) => ({ role: m.role, content: m.content })),
+      const session = runChatSession(
+        {
+          messages: updated,
           context: {
             currentTable: tableName,
             schema: schema ?? [],
             database: selectedDatabase,
           },
-        }),
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Request failed" }))
-        onMessagesChange(initialMessages.slice(0, -1).concat([
-          { role: "assistant", content: `Error: ${err.message}` }
-        ]))
-        onMessageUIChange((prev) => {
-          const next = new Map(prev)
-          next.delete(placeholderIndex)
-          return next
-        })
-        setIsLoading(false)
-        onLoadingChange?.(false)
-        return
-      }
-
-      const reader = res.body!.getReader()
-      const result = await processStream(
-        reader,
-        initialMessages,
-        (updatedMessages) => onMessagesChange(updatedMessages),
-        controller.signal,
+          lang,
+        },
+        {
+          fetchSSE: async (url, init) => {
+            const res = await fetch(url, { ...init, signal: controller.signal })
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({ message: "Request failed" }))
+              throw new Error(err.message || `Request failed: ${res.status}`)
+            }
+            return res.body as ReadableStream<Uint8Array>
+          },
+          getLlmConfig: () => currentLlmConfig,
+          getTraceId: () => traceId,
+        }
       )
 
-      if (result.aborted) {
-        onMessagesChange(getMessages().map((m, i) => {
-          if (i === getMessages().length - 1 && !m.content) {
-            return { ...m, content: _t("agent.stopped") }
+      let finalSql: string | null = null
+      let finalReasoning: string | undefined
+
+      for await (const event of session) {
+        if (controller.signal.aborted) break
+
+        switch (event.type) {
+          case "partial": {
+            const msgs = getMessages()
+            msgs[placeholderIndex] = { ...msgs[placeholderIndex], content: event.message } as AssistantMessage
+            onMessagesChange([...msgs])
+            break
           }
-          return m
-        }))
+
+          case "done": {
+            const msgs = getMessages()
+            msgs[placeholderIndex] = {
+              role: "assistant",
+              content: event.message,
+              sql: event.sql ?? undefined,
+              rows: event.rows,
+              columns: event.columns,
+              visualization: event.visualization,
+              reasoning: event.reasoning,
+            } satisfies AssistantMessage
+            onMessagesChange([...msgs])
+            finalSql = event.sql
+            finalReasoning = event.reasoning
+            break
+          }
+
+          case "error": {
+            const msgs = getMessages()
+            msgs[placeholderIndex] = { ...msgs[placeholderIndex], content: event.message } as AssistantMessage
+            onMessagesChange([...msgs])
+            break
+          }
+        }
       }
 
-      if (result.sql) {
-        appLog("[Agent]", traceId, "done:", result.messages[placeholderIndex]?.visualization?.type, "sql:", result.sql.slice(0, 60))
-        if (onSqlGenerated) onSqlGenerated(result.sql)
+      if (controller.signal.aborted) {
+        const msgs = getMessages()
+        const last = msgs[placeholderIndex] as AssistantMessage
+        if (!last.content) {
+          msgs[placeholderIndex] = { ...last, content: _t("agent.stopped") } as AssistantMessage
+          onMessagesChange([...msgs])
+        }
+      }
+
+      if (finalSql) {
+        appLog("[Agent]", traceId, "done:", (getMessages()[placeholderIndex] as AssistantMessage)?.visualization?.type, "sql:", finalSql.slice(0, 60))
+        if (onSqlGenerated) onSqlGenerated(finalSql)
       }
 
       onMessageUIChange((prev) => {
@@ -147,29 +172,28 @@ export function useStreamChat({
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         const currentMessages = getMessages()
-        onMessagesChange(currentMessages.map((m, i) => {
-          if (i === currentMessages.length - 1 && !m.content) {
-            return { ...m, content: _t("agent.stopped") }
-          }
-          return m
-        }))
-        onMessageUIChange((prev) => {
-          const next = new Map(prev)
-          const pi = prev.size > 0 ? Math.max(...prev.keys()) : 0
-          const existing = next.get(pi) ?? {}
-          next.set(pi, {
-            thinkingExpanded: false,
-            thinkingStartTime: existing.thinkingStartTime,
-            thinkingElapsedMs: existing.thinkingStartTime ? Date.now() - existing.thinkingStartTime : undefined,
-          })
-          return next
-        })
+        const last = currentMessages[placeholderIndex] as AssistantMessage
+        if (!last.content) {
+          currentMessages[placeholderIndex] = { ...last, content: _t("agent.stopped") } as AssistantMessage
+          onMessagesChange([...currentMessages])
+        }
       } else {
         onMessagesChange([
           ...getMessages(),
           { role: "assistant", content: `Network error: ${e instanceof Error ? e.message : "Unknown"}` },
         ])
       }
+      onMessageUIChange((prev) => {
+        const next = new Map(prev)
+        const pi = prev.size > 0 ? Math.max(...prev.keys()) : 0
+        const existing = next.get(pi) ?? {}
+        next.set(pi, {
+          thinkingExpanded: false,
+          thinkingStartTime: existing.thinkingStartTime,
+          thinkingElapsedMs: existing.thinkingStartTime ? Date.now() - existing.thinkingStartTime : undefined,
+        })
+        return next
+      })
     } finally {
       abortRef.current = null
       setIsLoading(false)

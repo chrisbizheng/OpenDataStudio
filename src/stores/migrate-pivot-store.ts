@@ -1,6 +1,24 @@
 import type { PivotIndicator, CalculatedIndicator, SortRule } from "@/lib/pivot-sql"
 import { migrateExpressionToAST } from "@/lib/expression"
-import { migrateIndicatorKey } from "@/stores/pivot"
+
+const AGG_SUFFIXES: Record<string, string> = {
+  _distinct_count: "DISTINCT_COUNT",
+  _sum: "SUM",
+  _avg: "AVG",
+  _count: "COUNT",
+  _min: "MIN",
+  _max: "MAX",
+}
+
+export function migrateIndicatorKey(oldKey: string): string | null {
+  for (const [suffix, agg] of Object.entries(AGG_SUFFIXES)) {
+    if (oldKey.endsWith(suffix)) {
+      const field = oldKey.slice(0, -suffix.length)
+      if (field) return `${field}-${agg}`
+    }
+  }
+  return null
+}
 
 export function migratePivotPersisted(persisted: unknown, current: unknown): unknown {
   const p = persisted as Record<string, unknown>

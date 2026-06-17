@@ -4,6 +4,7 @@
 
 - **目录 (Catalog)**：ClickHouse 元数据的深模块，隐藏获取、缓存、去重、错误恢复。接口：`loadDatabases/loadTables/loadSchema` + `getTables/getSchema` + `invalidate`。缝合点：`CatalogPort`（2 个适配器：HTTP 生产、Memory 测试）
 - **查询引擎 (Query Engine)**：SQL 执行的深模块，隐藏 HTTP 传输、请求中止、并发去重。接口：`execute(sql, database?) → QueryResult | null` + `cancel()`。缝合点：`QueryPort`（2 个适配器：HTTP 生产、Memory 测试）。新请求自动取消前一次，中止返回 null 而非抛异常
+- **查询生命周期 (Query Lifecycle)**：查询全流程的深模块，隐藏执行状态机、排序策略、搜索过滤、增量加载、稳定排序推断。接口：`execute(sql, table, append?)` + `sort(column, db, table, schema)` + `setSearchQuery(q)` + `loadMore()` + `getFilteredRows()` + `subscribe(listener)` + `state → QueryLifecycleState`。缝合点：`QueryLifecycleDeps`（1 适配器：`executeSql` 委托给 QueryEngine）。状态机：idle → executing → ok/error，排序内化客户端/服务端策略切换，搜索内化行过滤缓存
 - **选择 (Selection)**：用户当前选中的数据库和表，存储在 dataset store 中，与目录数据无关
 - **表 (Table)**：ClickHouse 中的数据表，是数据探索的基本单位
 - **列 (Column)**：表中的字段，有类型信息（String、Int、DateTime 等）
@@ -12,9 +13,9 @@
 - **结果窗口 (Result Window)**：Data Grid 当前已加载并可浏览的查询结果子集，不等同于全量查询结果
 - **窗口导出 (Window Export)**：导出当前结果窗口中的已加载数据
 - **全量导出 (Full Export)**：导出查询对应的完整结果集，不依赖 Data Grid 当前已加载的数据
-- **增量加载 (Incremental Loading)**：Data Grid 在用户接近结果窗口底部时继续加载后续结果页的浏览方式
-- **稳定结果顺序 (Stable Result Order)**：查询结果在分页加载时使用确定性排序，使不同结果页之间的顺序可预期
-- **窗口搜索 (Window Search)**：仅在结果窗口的已加载数据中执行的 Data Grid 搜索
+- **增量加载 (Incremental Loading)**：QueryLifecycle 在用户接近结果窗口底部时继续加载后续结果页的浏览方式，由 `loadMore()` 和 `shouldLoadMore()` 内部管理
+- **稳定结果顺序 (Stable Result Order)**：QueryLifecycle 内部推断确定性排序字段（时间/ID优先），使增量加载时结果顺序可预期，由 `inferStableOrder()` 管理
+- **窗口搜索 (Window Search)**：QueryLifecycle 内部在已加载数据中执行的搜索过滤，由 `getFilteredRows()` 管理并缓存
 - **窗口排序 (Window Sort)**：仅对结果窗口中的已加载数据进行排序，不代表全量查询结果顺序
 
 ## Pivot 术语
@@ -30,6 +31,7 @@
 - **小计 (Subtotal)**：按维度分组的部分汇总
 - **总计 (Grand Total)**：全部数据的汇总
 - **Drill-down（下钻）**：点击聚合值查看底层明细数据
+- **列类型分类器 (Column Type Classifier)**：ClickHouse 列类型系统的深模块，隐藏类型分类（维度/指标）、Nullable 解包、类型格式化、渲染器分派、metric 检测、FieldRole 解析与 override 注入。接口：`classify(type) → ColumnKind` + `isDimension/isIndicator/isMetricByName` + `unwrapNullable/formatType` + `resolveFieldRole(field, schema, overrides, db, table)` + `renderCell(value, type?, columnName?) → CellDescriptor | null`。缝合点：`ClassifierDeps`（2 适配器：ZustandPersist 生产、Memory 测试）。`isMetricColumn`（前缀匹配）保留在 `column-utils.ts` 不统一，因语义不同
 - **维度分类 (Dimension Classification)**：根据列类型自动判断字段适合做维度还是指标
   - 维度候选：String、FixedString、LowCardinality、Date、DateTime、Bool、Enum
   - 指标候选：Int、UInt、Float、Decimal
@@ -45,6 +47,9 @@
 - **数据网格 (Data Grid)**：虚拟滚动的表格视图，展示查询结果
 - **SQL 控制台 (SQL Console)**：Monaco Editor 编写的 SQL 编辑器
 - **Agent 聊天**：AI 助手对话面板，支持 NL2SQL
+- **AgentChatSession**：客户端对话流的深模块，隐藏 SSE 解析、消息增量构建、header 构建。接口：`runChatSession(input, deps) → AsyncGenerator<ChatEvent>`。缝合点：`ChatSessionDeps`（3 适配器：fetchSSE、getLlmConfig、getTraceId）。ChatEvent 类型：token/partial/done/error，done 帧含 reasoning。对等服务端 `runAgentPipeline`
+- **SSE 帧类型**：`SSETokenFrame { t: "token", c: string }` / `SSEDoneFrame { t: "done", message, sql, rows, columns, visualization, error?, reasoning? }` / `SSEErrorFrame { t: "error", message }`。客户端和服务端共享类型定义
+- **Message 可辨识联合**：`UserMessage { role: "user", content }` | `AssistantMessage { role: "assistant", content, sql?, rows?, columns?, visualization?, reasoning? }`。UI 组件按 role 分支渲染，assistant 属性仅 `AssistantMessage` 可访问
 - **设置面板**：LLM 配置弹窗（齿轮图标）
 - **状态栏**：底部连接状态指示器
 

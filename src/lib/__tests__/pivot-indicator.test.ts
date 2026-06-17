@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildNextPivotIndicator } from "../pivot-sql"
+import { buildNextPivotIndicator } from "../pivot-client-utils"
 
 describe("buildNextPivotIndicator", () => {
   it("同一字段再次添加为不同聚合方式", () => {

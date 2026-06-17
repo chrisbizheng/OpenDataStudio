@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/components/lang-provider"
 import { useData } from "@/components/data-provider"
-import { buildDistinctFilterValuesSQL, toggleFilterValue } from "@/lib/pivot-sql"
+import { buildDistinctFilterValuesSQL } from "@/lib/sql-utils"
+import { toggleFilterValue } from "@/lib/pivot-client-utils"
 import type { FilterRule } from "@/lib/pivot-sql"
-import type { FieldRole } from "@/lib/field-role"
+import type { FieldRole } from "@/lib/column-type-classifier"
 
 interface PivotFilterChipProps {
   filter: FilterRule

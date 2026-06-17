@@ -1,4 +1,4 @@
-import { isDimensionType, isIndicatorType } from "./column-utils"
+import { isDimensionType, isIndicatorType } from "./column-type-classifier"
 
 export interface DeepDiveItem {
   key: string

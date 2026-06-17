@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { createFieldRoleKey, getFieldRole, getNextFieldRole, parseFieldRoleKey } from "../field-role"
+import { createFieldRoleKey, getFieldRole, getNextFieldRole, parseFieldRoleKey } from "../column-type-classifier"
 
 describe("getFieldRole", () => {
   it("根据字段类型推断默认字段角色", () => {

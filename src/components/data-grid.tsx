@@ -4,9 +4,8 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { renderValue } from "./column-renderer"
 import { useLang } from "@/components/lang-provider"
-import { shortType } from "@/lib/column-utils"
+import { formatType } from "@/lib/column-type-classifier"
 import { SearchBar } from "@/components/search-bar"
-import { shouldLoadNextResultWindow } from "@/lib/incremental-loading"
 import type { ColumnMeta } from "@/lib/types"
 
 interface DataGridProps {
@@ -66,7 +65,7 @@ export function DataGrid({
         maxDataLen = Math.max(maxDataLen, str.length)
       }
       const nameW = textWidth(columns[i])
-      const typeW = colMeta.type ? textWidth(shortType(colMeta.type)) : 0
+      const typeW = colMeta.type ? textWidth(formatType(colMeta.type)) : 0
       const commentW = colMeta?.comment ? textWidth(colMeta.comment) : 0
       const headerW = Math.max(nameW, typeW, commentW)
       const dataW = maxDataLen * 7.5 + 16
@@ -88,7 +87,8 @@ export function DataGrid({
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     if (!onLoadMore || isLoading) return
     const el = event.currentTarget
-    if (shouldLoadNextResultWindow({ scrollTop: el.scrollTop, clientHeight: el.clientHeight, scrollHeight: el.scrollHeight })) {
+    const { scrollTop, clientHeight, scrollHeight } = el
+    if (scrollHeight - scrollTop - clientHeight <= 160) {
       onLoadMore()
     }
   }, [isLoading, onLoadMore])
@@ -178,8 +178,8 @@ export function DataGrid({
                           : `${col}: ${colMeta?.type ?? ""}`
                       }
                     >
-                      <div className="flex flex-col leading-tight py-0.5">
-                        <div className="flex items-center gap-1">
+                      <div className="flex flex-col gap-0.5 leading-tight py-0.5">
+                        <div className="flex items-center gap-1 leading-4">
                           <span className="text-xs font-semibold truncate">{col}</span>
                           {isSorted && sortDirection && (
                             <span className="text-[10px] shrink-0">
@@ -188,12 +188,12 @@ export function DataGrid({
                           )}
                         </div>
                         {colMeta.type && (
-                          <span className="text-[10px] text-muted-foreground/90 font-mono truncate">
-                            {shortType(colMeta.type)}
+                          <span className="text-[10px] text-muted-foreground/90 font-mono truncate leading-3">
+                            {formatType(colMeta.type)}
                           </span>
                         )}
                         {colMeta?.comment && (
-                          <span className="text-[10px] text-muted-foreground/90 italic truncate leading-tight">
+                          <span className="text-[10px] text-muted-foreground/90 italic truncate leading-3">
                             {colMeta.comment}
                           </span>
                         )}
@@ -224,7 +224,7 @@ export function DataGrid({
                       "border-t border-border hover:bg-muted/20 transition-colors" +
                       (virtualRow.index % 2 === 0
                         ? " bg-background"
-                        : " bg-muted/10")
+                        : " bg-muted/20")
                     }
                   >
                     <td

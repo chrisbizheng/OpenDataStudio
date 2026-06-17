@@ -32,6 +32,15 @@ export interface Catalog {
   loadSchema(database: string, table: string): Promise<ColumnMeta[]>
 
   invalidate(scope: InvalidateScope): void
+
+  subscribe(listener: () => void): () => void
+  version: number
+}
+
+export function pageData<T>(page: Page<T>): T | undefined {
+  if (page.status === "ok") return page.data
+  if (page.status === "loading" || page.status === "error") return page.stale
+  return undefined
 }
 
 type CacheKey = string
@@ -55,9 +64,22 @@ export class CatalogImpl implements Catalog {
   private port: CatalogPort
   private cache = new Map<CacheKey, Page<unknown>>()
   private inflight = new Map<CacheKey, Promise<unknown>>()
+  private listeners = new Set<() => void>()
+
+  version = 0
 
   constructor(port: CatalogPort) {
     this.port = port
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
+  private notify(): void {
+    this.version++
+    this.listeners.forEach((l) => l())
   }
 
   get databases(): Page<DatabaseInfo[]> {
@@ -81,11 +103,13 @@ export class CatalogImpl implements Catalog {
 
     const prev = this.cache.get(key) as Page<T> | undefined
     this.cache.set(key, { status: "loading", stale: extractStale(prev) })
+    this.notify()
 
     const p = fetcher().then(
       (data) => {
         this.cache.set(key, { status: "ok", data })
         this.inflight.delete(key)
+        this.notify()
         return data
       },
       (err) => {
@@ -96,6 +120,7 @@ export class CatalogImpl implements Catalog {
           stale: extractStale(prevEntry),
         })
         this.inflight.delete(key)
+        this.notify()
         throw err
       }
     )
@@ -145,5 +170,6 @@ export class CatalogImpl implements Catalog {
         break
       }
     }
+    this.notify()
   }
 }

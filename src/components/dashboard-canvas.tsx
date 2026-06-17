@@ -8,9 +8,9 @@ import { useTheme } from "@/components/theme-provider"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { useDatasetStore } from "@/stores/dataset"
 import { DashboardFilterBar } from "@/components/dashboard-filter-bar"
-import { ExternalLink, LayoutDashboard, BarChart3, Save, Upload, Pencil, CheckCircle2, FileCode, Plus, MessageSquare } from "lucide-react"
+import { ExternalLink, LayoutDashboard, BarChart3, Save, Upload, Pencil, CheckCircle2, FileCode, Plus, MessageSquare, PlusCircle } from "lucide-react"
 import { WidgetConfigEditor } from "@/components/widget-config-editor"
-import { useQueryStore } from "@/stores/query"
+import { useData } from "@/components/data-provider"
 import { DashboardList } from "@/components/dashboard-list"
 import { useLang } from "@/components/lang-provider"
 import { useUiStore } from "@/stores/ui"
@@ -43,7 +43,7 @@ export function DashboardCanvas() {
   const { _t } = useLang()
   const { width, containerRef } = useContainerWidth()
 
-  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter } =
+  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, dashboards, createDashboard } =
     useDashboardsStore(
       useShallow((s) => ({
         activeDashboard: s.dashboards.find((d) => d.id === s.activeDashboardId) ?? null,
@@ -55,8 +55,17 @@ export function DashboardCanvas() {
         updateWidget: s.updateWidget,
         addFilter: s.addFilter,
         removeFilter: s.removeFilter,
+        dashboards: s.dashboards,
+        createDashboard: s.createDashboard,
       }))
     )
+
+  const handleCreateDashboard = useCallback(() => {
+    const id = createDashboard(_t("dashboard.list.defaultName"))
+    useDashboardsStore.getState().setActiveDashboard(id)
+  }, [createDashboard, _t])
+
+  const hasDashboards = dashboards.length > 0
 
   const handleLayoutChange = useCallback(
     (layout: Layout) => {
@@ -104,23 +113,30 @@ export function DashboardCanvas() {
 
   const selectedTable = useDatasetStore((s) => s.selectedTable)
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
+  const { queryLifecycle } = useData()
 
   const handleEditSql = useCallback((widget: ChartWidget) => {
-    useQueryStore.getState().setSql(widget.sql)
-    useQueryStore.getState().setPendingAutoExecute(widget.sql)
+    queryLifecycle.setSql(widget.sql)
+    queryLifecycle.setPendingAutoExecute(widget.sql)
     useUiStore.getState().setPivotView("grid")
   }, [])
 
   if (!activeDashboard) {
     return (
       <div className="flex-1 flex min-h-0">
-        <div className="w-48 shrink-0 border-r border-border overflow-auto">
-          <DashboardList />
-        </div>
+        {hasDashboards ? (
+          <div className="w-48 shrink-0 border-r border-border overflow-auto">
+            <DashboardList />
+          </div>
+        ) : null}
         <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
           <LayoutDashboard className="w-12 h-12 opacity-40" />
           <span className="text-sm font-medium">{_t("dashboard.empty_title")}</span>
           <span className="text-xs">{_t("dashboard.empty_hint")}</span>
+          <Button variant="default" size="lg" className="mt-2" onClick={handleCreateDashboard}>
+            <PlusCircle className="h-4 w-4 mr-2" />
+            {_t("dashboard.empty_cta")}
+          </Button>
         </div>
       </div>
     )

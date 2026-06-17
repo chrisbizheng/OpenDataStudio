@@ -1,4 +1,4 @@
-import type { ChatContext, LlmConfig, RawViz } from "./agent-types"
+import type { ChatContext, LlmConfig, RawViz, VisualizationConfig } from "./agent-types"
 import type { ParsedResponse } from "./llm-response"
 import { buildLlmRequest } from "./llm-client"
 
@@ -29,17 +29,68 @@ export interface PipelineDeps {
     }
   ) => string
   parseResponse: (fullContent: string) => ParsedResponse
-  fixVisualization: (rawViz: RawViz, columns: string[]) => RawViz
-  inferVisualization: (sql: string, columns: string[]) => RawViz
+  fixVisualization: (rawViz: RawViz, columns: string[]) => VisualizationConfig | null
+  inferVisualization: (sql: string, columns: string[]) => VisualizationConfig | null
   fixConcatSql: (sql: string) => string | null
   isReadOnlySql: (sql: string) => boolean
 }
 
 export type PipelineEvent =
   | { type: "token"; content: string }
-  | { type: "llm-parsed"; sql?: string; viz?: RawViz }
-  | { type: "done"; message: string; sql: string | null; rows: unknown[][]; columns: string[]; visualization: RawViz; error?: string }
+  | { type: "llm-parsed"; sql?: string; viz?: RawViz; reasoning?: string }
+  | { type: "done"; message: string; sql: string | null; rows: unknown[][]; columns: string[]; visualization: VisualizationConfig | null; error?: string; reasoning?: string }
   | { type: "error"; message: string }
+
+type SqlExecutionResult =
+  | { ok: true; rows: unknown[][]; columns: string[] }
+  | { ok: false; event: PipelineEvent }
+
+async function executeSqlPhase(
+  deps: PipelineDeps,
+  rawSql: string,
+  formattedSql: string | null,
+  rawViz: RawViz,
+  msg: string,
+  reasoning?: string
+): Promise<SqlExecutionResult> {
+  const fixedSql = deps.fixConcatSql(rawSql)
+  const sqlToExecute = fixedSql || rawSql
+
+  if (!deps.isReadOnlySql(sqlToExecute)) {
+    return {
+      ok: false,
+      event: {
+        type: "done",
+        message: msg,
+        sql: formattedSql || rawSql,
+        rows: [],
+        columns: [],
+        visualization: null,
+        error: "Only SELECT, SHOW, DESCRIBE, EXPLAIN, and WITH statements are allowed",
+        reasoning,
+      },
+    }
+  }
+
+  try {
+    const result = await deps.executeSql(sqlToExecute)
+    return { ok: true, rows: result.rows, columns: result.columns }
+  } catch (e) {
+    return {
+      ok: false,
+      event: {
+        type: "done",
+        message: msg,
+        sql: formattedSql || rawSql,
+        rows: [],
+        columns: [],
+        visualization: null,
+        error: e instanceof Error ? e.message : "SQL execution failed",
+        reasoning,
+      },
+    }
+  }
+}
 
 export async function* runAgentPipeline(
   input: PipelineInput,
@@ -77,6 +128,7 @@ export async function* runAgentPipeline(
     type: "llm-parsed",
     sql: parsed.sql,
     viz: parsed.visualization,
+    reasoning: parsed.reasoning,
   }
 
   const msg = parsed.message
@@ -89,38 +141,13 @@ export async function* runAgentPipeline(
   let columns: string[] = []
 
   if (rawSql) {
-    const fixedSql = deps.fixConcatSql(rawSql)
-    const sqlToExecute = fixedSql || rawSql
-
-    if (!deps.isReadOnlySql(sqlToExecute)) {
-      yield {
-        type: "done",
-        message: msg,
-        sql: formattedSql || rawSql,
-        rows: [],
-        columns: [],
-        visualization: deps.fixVisualization(rawViz, []),
-        error: "Only SELECT, SHOW, DESCRIBE, EXPLAIN, and WITH statements are allowed",
-      }
+    const result = await executeSqlPhase(deps, rawSql, formattedSql, rawViz, msg, parsed.reasoning)
+    if (!result.ok) {
+      yield result.event
       return
     }
-
-    try {
-      const result = await deps.executeSql(sqlToExecute)
-      rows = result.rows
-      columns = result.columns
-    } catch (e) {
-      yield {
-        type: "done",
-        message: msg,
-        sql: formattedSql || rawSql,
-        rows: [],
-        columns: [],
-        visualization: deps.fixVisualization(rawViz, []),
-        error: e instanceof Error ? e.message : "SQL execution failed",
-      }
-      return
-    }
+    rows = result.rows
+    columns = result.columns
   }
 
   const effectiveViz =
@@ -139,5 +166,6 @@ export async function* runAgentPipeline(
     rows,
     columns,
     visualization: finalViz,
+    reasoning: parsed.reasoning,
   }
 }

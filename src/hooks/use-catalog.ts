@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useSyncExternalStore } from "react"
 import { useDatasetStore } from "@/stores/dataset"
 import { useData } from "@/components/data-provider"
-import type { DatabaseInfo } from "@/lib/catalog"
+import { pageData, type DatabaseInfo } from "@/lib/catalog"
 import type { TableMeta, ColumnMeta } from "@/lib/types"
 
 export interface CatalogState {
@@ -21,84 +22,51 @@ export interface CatalogState {
   refreshDatabases: () => void
 }
 
-interface FetchState {
-  databases: DatabaseInfo[]
-  tables: TableMeta[]
-  schema: ColumnMeta[]
-  isConnected: boolean
-  isLoading: boolean
-  error: string | null
-}
-
-const emptyFetch: FetchState = { databases: [], tables: [], schema: [], isConnected: false, isLoading: false, error: null }
-
 export function useCatalog(): CatalogState {
   const { selectedDatabase, selectedTable, selectDatabase: storeSelectDb, selectTable: storeSelectTable } = useDatasetStore()
   const { catalog } = useData()
-
-  const [fetchState, setFetchState] = useState<FetchState>(emptyFetch)
   const [refreshKey, setRefreshKey] = useState(0)
-  const mountedRef = useRef(true)
+
+  useSyncExternalStore(
+    (cb) => catalog.subscribe(cb),
+    () => catalog.version,
+    () => 0
+  )
 
   useEffect(() => {
-    mountedRef.current = true
-    return () => { mountedRef.current = false }
-  }, [])
-
-  useEffect(() => {
-    catalog.loadDatabases()
-      .then((data) => {
-        if (mountedRef.current) setFetchState((s) => ({ ...s, databases: data }))
-      })
-      .catch(() => {
-        const page = catalog.databases
-        if (mountedRef.current) setFetchState((s) => ({ ...s, databases: page.status === "ok" ? page.data : [] }))
-      })
+    catalog.loadDatabases().catch(() => {})
   }, [refreshKey, catalog])
 
   useEffect(() => {
     if (!selectedDatabase) return
-
-    catalog.loadTables(selectedDatabase)
-      .then((data) => {
-        if (mountedRef.current) setFetchState((s) => ({ ...s, tables: data, isConnected: true, isLoading: false, error: null }))
-      })
-      .catch((err) => {
-        const page = catalog.getTables(selectedDatabase)
-        const stale = page.status === "loading" ? page.stale : page.status === "ok" ? page.data : []
-        if (mountedRef.current) setFetchState((s) => ({
-          ...s,
-          tables: stale ?? [],
-          isConnected: false,
-          isLoading: false,
-          error: err instanceof Error ? err.message : "Failed to connect to ClickHouse",
-        }))
-      })
+    catalog.loadTables(selectedDatabase).catch(() => {})
   }, [selectedDatabase, catalog, refreshKey])
 
   useEffect(() => {
     if (!selectedDatabase || !selectedTable) return
-
-    catalog.loadSchema(selectedDatabase, selectedTable)
-      .then((data) => {
-        if (mountedRef.current) setFetchState((s) => ({ ...s, schema: data }))
-      })
-      .catch(() => {
-        const page = catalog.getSchema(selectedDatabase, selectedTable)
-        const stale = page.status === "loading" ? page.stale : page.status === "ok" ? page.data : []
-        if (mountedRef.current) setFetchState((s) => ({ ...s, schema: stale ?? [] }))
-      })
+    catalog.loadSchema(selectedDatabase, selectedTable).catch(() => {})
   }, [selectedDatabase, selectedTable, catalog, refreshKey])
 
-  const derived: FetchState = useMemo(() => {
-    if (!selectedDatabase) {
-      return { ...fetchState, tables: [], isConnected: false, isLoading: false, error: null }
-    }
-    if (!selectedDatabase || !selectedTable) {
-      return { ...fetchState, schema: [] }
-    }
-    return fetchState
-  }, [fetchState, selectedDatabase, selectedTable])
+  const dbPage = catalog.databases
+  const tablesPage = selectedDatabase ? catalog.getTables(selectedDatabase) : { status: "idle" as const }
+  const schemaPage = selectedDatabase && selectedTable ? catalog.getSchema(selectedDatabase, selectedTable) : { status: "idle" as const }
+
+  const databases = pageData(dbPage) ?? []
+  const tables = selectedDatabase ? (pageData(tablesPage) ?? []) : []
+  const schema = selectedDatabase && selectedTable ? (pageData(schemaPage) ?? []) : []
+
+  const isLoading =
+    dbPage.status === "loading" ||
+    (!!selectedDatabase && tablesPage.status === "loading") ||
+    (!!selectedDatabase && !!selectedTable && schemaPage.status === "loading")
+
+  const error =
+    dbPage.status === "error" ? dbPage.error.message
+    : tablesPage.status === "error" ? tablesPage.error.message
+    : schemaPage.status === "error" ? schemaPage.error.message
+    : null
+
+  const isConnected = tablesPage.status === "ok"
 
   const selectDatabase = useCallback((db: string) => {
     storeSelectDb(db)
@@ -118,17 +86,16 @@ export function useCatalog(): CatalogState {
   }, [catalog])
 
   return {
-    ...derived,
+    databases,
+    tables,
+    schema,
     selectedDatabase,
     selectedTable,
+    isConnected,
+    isLoading,
+    error,
     selectDatabase,
     selectTable,
     refreshDatabases,
   }
-}
-
-export function pageData<T>(page: { status: string; data?: T; stale?: T }): T | undefined {
-  if (page.status === "ok") return page.data
-  if (page.status === "loading" || page.status === "error") return page.stale
-  return undefined
 }

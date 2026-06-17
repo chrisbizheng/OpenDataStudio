@@ -1,6 +1,13 @@
 import { createClient } from "@clickhouse/client"
+import { format } from "sql-formatter"
 export type { TableMeta, ColumnMeta, QueryResult } from "./types"
 import type { TableMeta, ColumnMeta, QueryResult } from "./types"
+
+export interface ClassifiedError {
+  kind: "forbidden" | "sql_error" | "timeout" | "connection" | "unknown"
+  message: string
+  statusCode: number
+}
 
 let client: ReturnType<typeof createClient> | null = null
 
@@ -24,19 +31,55 @@ function getClient() {
 
 const READ_ONLY_PREFIXES = ["SELECT", "SHOW", "DESCRIBE", "EXPLAIN", "WITH"]
 
+export function extractFirstStatement(sql: string): string {
+  return sql
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s && !s.startsWith("--"))[0] || sql
+}
+
 export function isReadOnlySql(sql: string): boolean {
-  const trimmed = sql.trim().toUpperCase()
+  const singleSql = extractFirstStatement(sql)
+  const trimmed = singleSql.trim().toUpperCase()
   return READ_ONLY_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+}
+
+export function formatSql(sql: string): string {
+  try {
+    return format(sql, { language: "clickhouse", tabWidth: 2, keywordCase: "upper" })
+  } catch {
+    return sql
+  }
+}
+
+export function classifyError(e: unknown): ClassifiedError {
+  const message = e instanceof Error ? e.message : "Query execution failed"
+
+  if (message.startsWith("Only SELECT")) {
+    return { kind: "forbidden", message, statusCode: 403 }
+  }
+
+  if (message.includes("DB::Exception")) {
+    const clean = message.replace(/^.*DB::Exception:\s*/, "").replace(/\n.*$/, "")
+    return { kind: "sql_error", message: clean, statusCode: 400 }
+  }
+
+  if (message.includes("Timeout") || message.includes("max_execution_time")) {
+    return { kind: "timeout", message: "Query exceeded the 30-second time limit. Add LIMIT or filter conditions.", statusCode: 408 }
+  }
+
+  if (message.includes("ECONNREFUSED") || message.includes("connect")) {
+    return { kind: "connection", message, statusCode: 502 }
+  }
+
+  return { kind: "unknown", message, statusCode: 500 }
 }
 
 export async function executeReadOnly(
   sql: string,
   database?: string
 ): Promise<QueryResult> {
-  const singleSql = sql
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s && !s.startsWith("--"))[0] || sql
+  const singleSql = extractFirstStatement(sql)
 
   if (!isReadOnlySql(singleSql)) {
     throw new Error("Only SELECT, SHOW, DESCRIBE, EXPLAIN, and WITH statements are allowed")
@@ -111,8 +154,6 @@ export async function query(
 
   const rows = (await result.json()) as Record<string, unknown>[]
   const columns = rows.length > 0 ? Object.keys(rows[0]) : []
-
-  console.log("[query]", { sql: sql.slice(0, 200), rows: rows.length, cols: columns.length, elapsed })
 
   return {
     columns,

@@ -2,7 +2,7 @@ import type { LlmConfig } from "./agent-types"
 import { buildLlmHeaders } from "./llm-client"
 import { getTraceId } from "./client-logger"
 
-export function buildAgentHeaders(
+function buildAgentHeaders(
   llmConfig: LlmConfig,
   traceId: string
 ): Record<string, string> {
