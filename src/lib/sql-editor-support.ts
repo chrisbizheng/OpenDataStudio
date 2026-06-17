@@ -150,6 +150,17 @@ interface TableNames {
   all: { db: string; table: string }[]
 }
 
+/**
+ * Schema lookup contract for SQL completion.
+ *
+ * KNOWN LIMITATION: callers may return `[]` for tables that aren't currently
+ * loaded into local state (e.g. JOIN-ed tables not matching the active table).
+ * When that happens, `createChCompletionSource` falls back to suggesting
+ * table names instead of column names after `alias.` — graceful but
+ * incomplete. Callers wanting full JOIN completion must wire up multi-table
+ * schema fetching (e.g. via the catalog) and return real columns from
+ * `columnsFor` for any (db, table) pair the user references.
+ */
 interface SchemaCache {
   columnsFor(db: string | undefined, table: string): ColumnInfo[]
   tablesForDb(db: string): string[]

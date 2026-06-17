@@ -11,6 +11,17 @@ export interface ResolvedFieldRole {
 
 const METRIC_KEYWORDS = ["amount", "avg", "balance", "budget", "cost", "count", "fee", "max", "min", "pct", "percent", "price", "profit", "qty", "quantity", "rate", "revenue", "sales", "sold", "sum", "total", "units", "value", "volume"]
 
+const METRIC_PREFIX_PATTERN = new RegExp(`^(${METRIC_KEYWORDS.join("|")})`, "i")
+
+/**
+ * Prefix-anchored metric detection. `sum_sales` → true; `user_count` → false.
+ * Use when filtering metric columns from query results (avoids false positives on dimension names that contain metric words).
+ */
+export function isMetricColumn(name?: string): boolean {
+  if (!name) return false
+  return METRIC_PREFIX_PATTERN.test(name)
+}
+
 const KEY_SEPARATOR = "\u0000"
 
 export function createFieldRoleKey(database: string, table: string, column: string): string {

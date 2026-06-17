@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useLang } from "@/components/lang-provider"
+import { useIsDark } from "@/hooks/use-is-dark"
 import CodeMirror from "@uiw/react-codemirror"
 import { sql, keywordCompletionSource } from "@codemirror/lang-sql"
 import { autocompletion, acceptCompletion, moveCompletionSelection } from "@codemirror/autocomplete"
@@ -84,15 +85,7 @@ export function SqlConsole({
     ]),
   ], [completionSource])
 
-  const [isDark, setIsDark] = useState(true)
-
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
-    check()
-    const obs = new MutationObserver(check)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
-    return () => obs.disconnect()
-  }, [])
+  const isDark = useIsDark()
 
   const activeTheme = isDark ? vscodeDark : vscodeLight
 

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/components/lang-provider"
 import { useData } from "@/components/data-provider"
-import { buildDistinctFilterValuesSQL } from "@/lib/sql-utils"
+import { fetchDistinctValues } from "@/lib/distinct-values"
 import { toggleFilterValue } from "@/lib/pivot-client-utils"
 import type { FilterRule } from "@/lib/pivot-sql"
 import type { FieldRole } from "@/lib/column-type-classifier"
@@ -43,11 +43,10 @@ export function PivotFilterChip({
     setOpen(nextOpen)
     if (!nextOpen || isRange || options.length > 0 || loading) return
     setLoading(true)
-    queryEngine.execute(
-      buildDistinctFilterValuesSQL(database, tableName, filter.field),
-      database
+    fetchDistinctValues(database, tableName, filter.field, (sql, db) =>
+      queryEngine.execute(sql, db),
     )
-      .then((result) => result && setOptions(result.rows.map((row) => row[0])))
+      .then((values) => setOptions(values))
       .catch(() => setOptions([]))
       .finally(() => setLoading(false))
   }

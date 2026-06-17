@@ -1,33 +1,25 @@
-import { unwrapNullable } from "@/lib/column-type-classifier"
-import { isMetricColumn } from "@/lib/column-utils"
+import { classifyColumnType, isMetricColumn } from "@/lib/column-type-classifier"
 
 export function renderValue(value: unknown, type?: string, columnName?: string): React.ReactNode {
   if (value === null || value === undefined) {
     return <NullBadge />
   }
 
-  const baseType = type ? unwrapNullable(type) : ""
+  const kind = type ? classifyColumnType(type) : "other"
 
-  if (baseType.startsWith("Int") || baseType.startsWith("UInt")) {
+  if (kind === "indicator") {
     return <NumberCell value={value as number} columnName={columnName} />
   }
 
-  if (
-    baseType.startsWith("Float") ||
-    baseType.startsWith("Decimal")
-  ) {
-    return <NumberCell value={value as number} columnName={columnName} />
-  }
-
-  if (baseType.startsWith("DateTime") || baseType === "Date") {
+  if (kind === "date") {
     return <DateCell value={value as string} />
   }
 
-  if (baseType === "Bool") {
+  if (kind === "boolean") {
     return value ? "✓" : "✗"
   }
 
-  if (baseType.startsWith("Array(") || Array.isArray(value)) {
+  if (kind === "array" || Array.isArray(value)) {
     return <ArrayCell value={value as unknown[]} />
   }
 

@@ -10,10 +10,29 @@ export function validateDirection(dir: string): "ASC" | "DESC" {
   return upper as "ASC" | "DESC"
 }
 
+/**
+ * Escape a value as a ClickHouse SQL string literal (quoted).
+ * Escapes backslashes (`\` → `\\`) AND single quotes (`'` → `''`).
+ * Both are required for ClickHouse string literal safety.
+ *
+ * Returns the value wrapped in single quotes: `'foo'`.
+ * For raw (unquoted) escape, see `escapeSqlString` below.
+ */
 export function escapeValue(value: unknown): string {
   const s = String(value ?? "")
-  const escaped = s.replace(/'/g, "''")
+  const escaped = s.replace(/\\/g, "\\\\").replace(/'/g, "''")
   return `'${escaped}'`
+}
+
+/**
+ * Escape a string for safe interpolation into a ClickHouse SQL string literal.
+ * Returns the bare escaped content (no surrounding quotes).
+ * Caller must wrap result in `'...'` themselves.
+ *
+ * Use `escapeValue` instead when you want quotes included.
+ */
+export function escapeSqlString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "''")
 }
 
 export function escapeLikeValue(value: unknown): string {

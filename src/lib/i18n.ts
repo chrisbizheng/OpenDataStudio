@@ -356,7 +356,15 @@ const dict: Record<string, { zh: string; en: string }> = {
 }
 
 export function t(key: string, lang: Lang): string {
-  return dict[key]?.[lang] ?? key
+  const entry = dict[key]
+  if (!entry) {
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.warn(`[i18n] missing key: ${key}`)
+    }
+    return key
+  }
+  return entry[lang] ?? key
 }
 
 export function getStoredLang(): Lang {

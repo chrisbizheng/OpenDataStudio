@@ -380,6 +380,49 @@ export function buildSeries(
   return [barSeries(data)]
 }
 
+function buildAxisExtras(
+  resolvedType: string,
+  chartData: Record<string, unknown>[],
+  config: ChartConfig,
+  resolvedXKey: string,
+  yKey: string,
+  isDark: boolean,
+): Partial<Pick<EChartsOption, "radar" | "polar" | "angleAxis" | "radiusAxis">> | undefined {
+  if (resolvedType === "radar") {
+    return {
+      radar: {
+        indicator: chartData.map((d) => ({ name: String(d[resolvedXKey] ?? "").slice(0, 8) })),
+        shape: (config.style?.radarShape ?? "polygon") as "polygon" | "circle",
+        ...(config.style?.radarSplitNumber && { splitNumber: config.style.radarSplitNumber }),
+        splitArea: { areaStyle: { color: isDark ? ["#1a1a2e", "#16213e"] : ["#f5f5ff", "#fff"] } },
+        axisLine: { lineStyle: { color: isDark ? "#444" : "#ddd" } },
+        splitLine: { lineStyle: { color: isDark ? "#333" : "#eee" } },
+      },
+    }
+  }
+
+  if (resolvedType === "radialBar") {
+    const startAngle = config.style?.radialStartAngle ?? 90
+    const endAngle = config.style?.radialEndAngle ?? -90
+    return {
+      polar: { radius: ["20%", "80%"] },
+      angleAxis: {
+        max: Math.max(...chartData.map((d) => Number(d[yKey]) || 0)) * 1.2,
+        startAngle,
+        endAngle,
+        show: false,
+      },
+      radiusAxis: {
+        type: "category",
+        data: chartData.map((d) => String(d[resolvedXKey] ?? "")),
+        axisLabel: { fontSize: 9 },
+      },
+    }
+  }
+
+  return undefined
+}
+
 export function markMax(
   option: EChartsOption,
   maxItem: Record<string, unknown> | null,
@@ -604,32 +647,12 @@ export function buildEChartsOption(params: ChartPreparedData & {
     }
   }
 
-  if (resolvedType === "radar") {
-    opt.radar = {
-      indicator: chartData.map((d) => ({ name: String(d[resolvedXKey] ?? "").slice(0, 8) })),
-      shape: (config.style?.radarShape ?? "polygon") as "polygon" | "circle",
-      ...(config.style?.radarSplitNumber && { splitNumber: config.style.radarSplitNumber }),
-      splitArea: { areaStyle: { color: isDark ? ["#1a1a2e", "#16213e"] : ["#f5f5ff", "#fff"] } },
-      axisLine: { lineStyle: { color: isDark ? "#444" : "#ddd" } },
-      splitLine: { lineStyle: { color: isDark ? "#333" : "#eee" } },
-    }
-  }
-
-  if (resolvedType === "radialBar") {
-    const startAngle = config.style?.radialStartAngle ?? 90
-    const endAngle = config.style?.radialEndAngle ?? -90
-    opt.polar = { radius: ["20%", "80%"] }
-    opt.angleAxis = {
-      max: Math.max(...chartData.map((d) => Number(d[yKey]) || 0)) * 1.2,
-      startAngle,
-      endAngle,
-      show: false,
-    }
-    opt.radiusAxis = {
-      type: "category",
-      data: chartData.map((d) => String(d[resolvedXKey] ?? "")),
-      axisLabel: { fontSize: 9 },
-    }
+  const axisExtras = buildAxisExtras(resolvedType, chartData, config, resolvedXKey, yKey, isDark)
+  if (axisExtras) {
+    if (axisExtras.radar) opt.radar = axisExtras.radar
+    if (axisExtras.polar) opt.polar = axisExtras.polar
+    if (axisExtras.angleAxis) opt.angleAxis = axisExtras.angleAxis
+    if (axisExtras.radiusAxis) opt.radiusAxis = axisExtras.radiusAxis
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

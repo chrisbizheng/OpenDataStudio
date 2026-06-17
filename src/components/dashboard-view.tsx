@@ -9,7 +9,7 @@ import { useLang } from "@/components/lang-provider"
 import { useDashboardsStore, type ChartWidget, type WidgetLayout } from "@/stores/dashboards"
 import { ChartWidgetRenderer } from "@/components/chart-widget-renderer"
 import { DashboardFilterBar } from "@/components/dashboard-filter-bar"
-import { toRGLLayout } from "@/lib/dashboard-utils"
+import { toRGLLayout, DASHBOARD_GRID_CONFIG, DASHBOARD_GRID_CSS } from "@/lib/dashboard-utils"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Moon, Sun } from "lucide-react"
 import Link from "next/link"
@@ -97,15 +97,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
       />
 
       <div ref={containerRef} className="flex-1 min-h-0 overflow-auto">
-        <style>{`
-          .react-grid-placeholder {
-            background: color-mix(in oklch, var(--accent) 30%, transparent) !important;
-            opacity: 1 !important;
-          }
-          .react-grid-item > .react-resizable-handle::after {
-            border-color: var(--border) !important;
-          }
-        `}</style>
+        <style>{DASHBOARD_GRID_CSS}</style>
         {dashboard.widgets.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
             <span className="text-sm">{_t("dashboard.no_widgets_title")}</span>
@@ -114,13 +106,7 @@ export function DashboardView({ dashboardId }: { dashboardId: string }) {
           <GridLayout
             width={width}
             layout={layout}
-            gridConfig={{
-              cols: 12,
-              rowHeight: 80,
-              margin: [12, 12] as const,
-              containerPadding: null,
-              maxRows: Infinity,
-            }}
+            gridConfig={DASHBOARD_GRID_CONFIG}
             dragConfig={{ enabled: false }}
             resizeConfig={{ enabled: false }}
             onLayoutChange={() => {}}

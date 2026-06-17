@@ -1,4 +1,4 @@
-import { isMetricColumn } from "./column-utils"
+import { isMetricColumn } from "./column-type-classifier"
 import type { RawViz, VisualizationConfig } from "./agent-types"
 
 export function fixVisualization(

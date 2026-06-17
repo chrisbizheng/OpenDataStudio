@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isMetricColumn } from "../column-utils"
+import { isMetricColumn } from "../column-type-classifier"
 
 describe("isMetricColumn", () => {
   it("以 sum_ 开头的列名被识别为指标", () => {

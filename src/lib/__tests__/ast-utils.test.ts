@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { toSQL, extractDependencies, validateAST, inferType, cloneNode, astToSummary } from "../expression"
+import { toSQL, extractDependencies, validate, cloneNode, astToSummary } from "../expression"
 import type { ExpressionNode } from "../ast-types"
 
 describe("toSQL", () => {
@@ -35,46 +35,6 @@ describe("toSQL", () => {
   })
 
   it("literal 字符串含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串含单引号时转义为两个单引号", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串节点含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串节点含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串含单引号时转义", () => {
-    const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
-    expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
-  })
-
-  it("literal 字符串含单引号时转义为两个单引号", () => {
     const node: ExpressionNode = { type: "literal", value: "O'Brien", dataType: "String" }
     expect(toSQL(node, refSQLMap)).toBe("'O''Brien'")
   })
@@ -239,7 +199,7 @@ describe("extractDependencies", () => {
   })
 })
 
-describe("validateAST", () => {
+describe("validate", () => {
   const availableKeys = ["sales_sum", "profit_sum", "cost_sum"]
   const availableFields = ["sales", "profit", "cost", "user_id"]
 
@@ -250,28 +210,28 @@ describe("validateAST", () => {
         { type: "ref", key: "cost_sum" },
       ],
     }
-    const result = validateAST(node, availableKeys)
+    const result = validate(node, availableKeys)
     expect(result.valid).toBe(true)
     expect(result.errors).toEqual([])
   })
 
   it("引用不存在的指标返回错误", () => {
     const node: ExpressionNode = { type: "ref", key: "unknown" }
-    const result = validateAST(node, availableKeys)
+    const result = validate(node, availableKeys)
     expect(result.valid).toBe(false)
     expect(result.errors[0]).toContain("unknown")
   })
 
   it("agg 引用不存在的字段返回错误", () => {
     const node: ExpressionNode = { type: "agg", func: "SUM", field: "missing" }
-    const result = validateAST(node, availableKeys, availableFields)
+    const result = validate(node, availableKeys, availableFields)
     expect(result.valid).toBe(false)
     expect(result.errors[0]).toContain("missing")
   })
 
   it("不提供 availableFields 时不校验 agg 字段", () => {
     const node: ExpressionNode = { type: "agg", func: "SUM", field: "anything" }
-    const result = validateAST(node, availableKeys)
+    const result = validate(node, availableKeys)
     expect(result.valid).toBe(true)
   })
 
@@ -286,56 +246,9 @@ describe("validateAST", () => {
         { type: "literal", value: 0, dataType: "Int64" },
       ],
     }
-    const result = validateAST(node, availableKeys)
+    const result = validate(node, availableKeys)
     expect(result.valid).toBe(false)
     expect(result.errors).toHaveLength(1)
-  })
-})
-
-describe("inferType", () => {
-  it("literal 节点返回其 dataType", () => {
-    const node: ExpressionNode = { type: "literal", value: 42, dataType: "Float64" }
-    expect(inferType(node)).toBe("Float64")
-  })
-
-  it("divide 调用返回 Float64", () => {
-    const node: ExpressionNode = {
-      type: "call", func: "divide", args: [
-        { type: "ref", key: "a" },
-        { type: "ref", key: "b" },
-      ],
-    }
-    expect(inferType(node)).toBe("Float64")
-  })
-
-  it("SUM agg 返回 Float64", () => {
-    const node: ExpressionNode = { type: "agg", func: "SUM", field: "revenue" }
-    expect(inferType(node)).toBe("Float64")
-  })
-
-  it("COUNT agg 返回 UInt64", () => {
-    const node: ExpressionNode = { type: "agg", func: "COUNT", field: "user_id" }
-    expect(inferType(node)).toBe("UInt64")
-  })
-
-  it("greater 比较返回 UInt8", () => {
-    const node: ExpressionNode = {
-      type: "call", func: "greater", args: [
-        { type: "ref", key: "a" },
-        { type: "literal", value: 0, dataType: "Int64" },
-      ],
-    }
-    expect(inferType(node)).toBe("UInt8")
-  })
-
-  it("concat 返回 String", () => {
-    const node: ExpressionNode = {
-      type: "call", func: "concat", args: [
-        { type: "literal", value: "a", dataType: "String" },
-        { type: "literal", value: "b", dataType: "String" },
-      ],
-    }
-    expect(inferType(node)).toBe("String")
   })
 })
 

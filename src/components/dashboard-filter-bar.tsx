@@ -5,30 +5,9 @@ import { X, Plus } from "lucide-react"
 import { useLang } from "@/components/lang-provider"
 import { useCatalog } from "@/hooks/use-catalog"
 import { useDashboardsStore, type DashboardFilter } from "@/stores/dashboards"
-import { buildDistinctFilterValuesSQL } from "@/lib/sql-utils"
+import { fetchDistinctValues, fetchViaApiQuery } from "@/lib/distinct-values"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-
-const DISTINCT_VALUES_CACHE_TTL = 60_000
-const distinctValuesCache = new Map<string, { values: string[]; ts: number }>()
-
-function getCachedDistinctValues(key: string): string[] | null {
-  const entry = distinctValuesCache.get(key)
-  if (!entry) return null
-  if (Date.now() - entry.ts > DISTINCT_VALUES_CACHE_TTL) {
-    distinctValuesCache.delete(key)
-    return null
-  }
-  return entry.values
-}
-
-function setCachedDistinctValues(key: string, values: string[]) {
-  distinctValuesCache.set(key, { values, ts: Date.now() })
-}
-
-/** TTL cache for distinct filter values — avoids repeated network calls for the same column */
-const distinctValueCache = new Map<string, { values: string[]; expiresAt: number }>()
-const DISTINCT_VALUE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
 interface DashboardFilterBarProps {
   dashboardId: string
@@ -115,31 +94,15 @@ function AddFilterButton({
         setStep("value")
         return
       }
-      const cacheKey = `${selectedDatabase}.${selectedTable}.${column}`
-      const cached = getCachedDistinctValues(cacheKey)
-      if (cached) {
-        setDistinctValues(cached)
-        setStep("value")
-        return
-      }
       setStep("loading")
       try {
-        const sql = buildDistinctFilterValuesSQL(
+        const raw = await fetchDistinctValues(
           selectedDatabase,
           selectedTable,
           column,
+          fetchViaApiQuery,
         )
-        const res = await fetch("/api/query", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sql }),
-        })
-        const json = await res.json()
-        const values: string[] = (json.rows || []).map(
-          (r: unknown[]) => String(r[0]),
-        )
-        setCachedDistinctValues(cacheKey, values)
-        setDistinctValues(values)
+        setDistinctValues(raw.map(String))
         setStep("value")
       } catch {
         setDistinctValues([])

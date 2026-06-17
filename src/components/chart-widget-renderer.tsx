@@ -5,6 +5,8 @@ import { useShallow } from "zustand/react/shallow"
 import { useLang } from "@/components/lang-provider"
 import { Chart } from "@/components/chart"
 import { widgetCache, type QueryResult } from "@/lib/widget-cache"
+import { executeWidgetQuery } from "@/lib/widget-execution"
+import { escapeSqlString } from "@/lib/sql-utils"
 import { useDashboardsStore, type ChartWidget, type DashboardFilter } from "@/stores/dashboards"
 import { AlertTriangle, RefreshCw, Settings2, FileCode, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -13,11 +15,6 @@ import { Badge } from "@/components/ui/badge"
 
 /** Characters that are safe in ClickHouse column identifiers */
 const SAFE_COLUMN_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
-
-/** Escape a value for safe interpolation into a ClickHouse SQL string */
-function escapeSqlValue(val: string): string {
-  return val.replace(/\\/g, "\\\\").replace(/'/g, "''")
-}
 
 /** Wrap SQL with dashboard filter WHERE clauses */
 export function buildFilteredSql(baseSql: string, filters: DashboardFilter[]): string {
@@ -30,7 +27,7 @@ export function buildFilteredSql(baseSql: string, filters: DashboardFilter[]): s
         console.warn(`[buildFilteredSql] Invalid column name rejected: "${f.column}"`)
         return null
       }
-      const escapedValue = escapeSqlValue(String(f.value))
+      const escapedValue = escapeSqlString(String(f.value))
       return `\`${f.column}\` = '${escapedValue}'`
     })
     .filter(Boolean)
@@ -127,19 +124,7 @@ export function ChartWidgetRenderer({
     try {
       const baseSql = widget.baseSql || widget.sql
       const sql = buildFilteredSql(baseSql, dashboardFilters)
-      const res = await fetch("/api/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sql }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || _t("dashboard.refresh_failed"))
-
-      const result: QueryResult = {
-        columns: json.columns,
-        rows: json.rows,
-        fetchedAt: Date.now(),
-      }
+      const result = await executeWidgetQuery(sql)
       await widgetCache.set(widget.id, result)
       setCachedResult(result)
       updateWidgetLastRunAt(dashboardId, widget.id, Date.now())
@@ -148,7 +133,7 @@ export function ChartWidgetRenderer({
     } finally {
       setRefreshing(false)
     }
-  }, [widget.id, widget.sql, widget.baseSql, dashboardId, dashboardFilters, updateWidgetLastRunAt, _t])
+  }, [widget.id, widget.sql, widget.baseSql, dashboardId, dashboardFilters, updateWidgetLastRunAt])
 
   const prevFilterCountRef = useRef(dashboardFilters.length)
   useEffect(() => {

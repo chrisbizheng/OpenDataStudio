@@ -8,33 +8,22 @@ import { useTheme } from "@/components/theme-provider"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { useDatasetStore } from "@/stores/dataset"
 import { DashboardFilterBar } from "@/components/dashboard-filter-bar"
-import { ExternalLink, LayoutDashboard, BarChart3, Save, Upload, Pencil, CheckCircle2, FileCode, Plus, MessageSquare, PlusCircle } from "lucide-react"
+import { LayoutDashboard, BarChart3, Plus, PlusCircle } from "lucide-react"
 import { WidgetConfigEditor } from "@/components/widget-config-editor"
 import { useData } from "@/components/data-provider"
 import { DashboardList } from "@/components/dashboard-list"
 import { useLang } from "@/components/lang-provider"
 import { useUiStore } from "@/stores/ui"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import type { ChartWidget, WidgetLayout } from "@/stores/dashboards"
+import type { ChartWidget } from "@/stores/dashboards"
 import { CreateWidgetSqlDialog } from "@/components/create-widget-sql-dialog"
 import { CreateWidgetAiDialog } from "@/components/create-widget-ai-dialog"
-import { ChartWidgetRenderer, buildFilteredSql, formatTimeAgo } from "@/components/chart-widget-renderer"
-import { toRGLLayout } from "@/lib/dashboard-utils"
+import { ChartWidgetRenderer } from "@/components/chart-widget-renderer"
+import { toRGLLayout, fromRGLLayout, DASHBOARD_GRID_CONFIG, DASHBOARD_GRID_CSS } from "@/lib/dashboard-utils"
+import { DashboardToolbar } from "@/components/dashboard-toolbar"
 
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
-
-/** Convert react-grid-layout Layout → store WidgetLayout[] */
-function fromRGLLayout(layout: Layout): WidgetLayout[] {
-  return layout.map((l) => ({
-    i: l.i,
-    x: l.x,
-    y: l.y,
-    w: l.w,
-    h: l.h,
-  }))
-}
 
 export function DashboardCanvas() {
   const { resolved: themeMode } = useTheme()
@@ -43,7 +32,7 @@ export function DashboardCanvas() {
   const { _t } = useLang()
   const { width, containerRef } = useContainerWidth()
 
-  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, dashboards, createDashboard } =
+  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, dashboards, createDashboard, isDirty: storeIsDirty } =
     useDashboardsStore(
       useShallow((s) => ({
         activeDashboard: s.dashboards.find((d) => d.id === s.activeDashboardId) ?? null,
@@ -57,6 +46,7 @@ export function DashboardCanvas() {
         removeFilter: s.removeFilter,
         dashboards: s.dashboards,
         createDashboard: s.createDashboard,
+        isDirty: s.isDirty,
       }))
     )
 
@@ -81,10 +71,7 @@ export function DashboardCanvas() {
   )
 
   const isPublished = activeDashboard?.status === "published"
-  const isDirty =
-    activeDashboard != null &&
-    activeDashboard.lastSavedAt != null &&
-    activeDashboard.updatedAt > activeDashboard.lastSavedAt
+  const isDirty = activeDashboardId ? storeIsDirty(activeDashboardId) : false
 
   const handleSave = useCallback(() => {
     if (!activeDashboard) return
@@ -195,25 +182,11 @@ export function DashboardCanvas() {
           isPublished={!!isPublished}
         />
         <div className="flex-1 min-h-0 overflow-auto">
-        <style>{`
-          .react-grid-placeholder {
-            background: color-mix(in oklch, var(--accent) 30%, transparent) !important;
-            opacity: 1 !important;
-          }
-          .react-grid-item > .react-resizable-handle::after {
-            border-color: var(--border) !important;
-          }
-        `}</style>
+        <style>{DASHBOARD_GRID_CSS}</style>
       <GridLayout
         width={width}
         layout={layout}
-        gridConfig={{
-          cols: 12,
-          rowHeight: 80,
-          margin: [12, 12] as const,
-          containerPadding: null,
-          maxRows: Infinity,
-        }}
+        gridConfig={DASHBOARD_GRID_CONFIG}
         dragConfig={{ enabled: !isPublished }}
         resizeConfig={{ enabled: !isPublished }}
         onLayoutChange={handleLayoutChange}
@@ -263,8 +236,6 @@ export function DashboardCanvas() {
         open={showSqlDialog}
         onOpenChange={setShowSqlDialog}
         dashboardId={activeDashboardId}
-        tableName={selectedTable}
-        selectedDatabase={selectedDatabase}
       />
     )}
     {activeDashboardId && (
@@ -280,93 +251,3 @@ export function DashboardCanvas() {
   )
 }
 
-// ── Dashboard Toolbar ───────────────────────────────────────
-
-interface DashboardToolbarProps {
-  name: string
-  isPublished: boolean
-  isDirty: boolean
-  dashboardId: string
-  onSave: () => void
-  onPublish: () => void
-  onEditDraft: () => void
-  onNewSql: () => void
-  onNewAi: () => void
-  _t: (key: string) => string
-}
-
-function DashboardToolbar({
-  name,
-  isPublished,
-  isDirty,
-  dashboardId,
-  onSave,
-  onPublish,
-  onEditDraft,
-  onNewSql,
-  onNewAi,
-  _t,
-}: DashboardToolbarProps) {
-  const handleOpenView = useCallback(() => {
-    window.open(`/dashboard/${dashboardId}`, "_blank")
-  }, [dashboardId])
-  return (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card shrink-0">
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-sm">{name}</span>
-        <Badge variant={isPublished ? "default" : "secondary"} className="text-[10px]">
-          {isPublished ? (
-            <>
-              <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
-              {_t("dashboard.published")}
-            </>
-          ) : (
-            _t("dashboard.draft")
-          )}
-        </Badge>
-        {isDirty && (
-          <Badge variant="destructive" className="text-[10px]">
-            {_t("dashboard.unsaved")}
-          </Badge>
-        )}
-      </div>
-      <div className="flex items-center gap-2">
-        {!isPublished && (
-          <>
-            <Button size="xs" variant="outline" onClick={onNewSql}>
-              <FileCode className="h-3 w-3 mr-1" />
-              {_t("dashboard.new_sql")}
-            </Button>
-            <Button size="xs" variant="outline" onClick={onNewAi}>
-              <MessageSquare className="h-3 w-3 mr-1" />
-              {_t("dashboard.new_ai")}
-            </Button>
-          </>
-        )}
-        {isPublished ? (
-          <>
-            <Button size="xs" variant="outline" onClick={handleOpenView}>
-              <ExternalLink className="h-3 w-3 mr-1" />
-              {_t("dashboard.view_open")}
-            </Button>
-            <Button size="xs" variant="outline" onClick={onEditDraft}>
-              <Pencil className="h-3 w-3 mr-1" />
-              {_t("dashboard.edit_draft")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button size="xs" variant="outline" onClick={onSave} disabled={!isDirty}>
-              <Save className="h-3 w-3 mr-1" />
-              {_t("dashboard.save")}
-            </Button>
-            <Button size="xs" variant="default" onClick={onPublish}>
-              <Upload className="h-3 w-3 mr-1" />
-              {_t("dashboard.publish")}
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}

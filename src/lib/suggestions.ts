@@ -1,6 +1,5 @@
 import type { ColumnMeta } from "./types"
-import { isMetricByName, isIndicatorType, isDimensionType, unwrapNullable } from "./column-type-classifier"
-import { isMetricColumn } from "./column-utils"
+import { isMetricByName, isMetricColumn, isIndicatorType, isDimensionType, unwrapNullable } from "./column-type-classifier"
 
 export function suggestQuestions(schema: ColumnMeta[], lang: string): string[] {
   const suggestions: string[] = []

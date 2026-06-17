@@ -42,14 +42,6 @@ export function validate(
   availableIndicatorKeys: string[],
   availableFields?: string[]
 ): ValidationResult {
-  return validateAST(node, availableIndicatorKeys, availableFields)
-}
-
-export function validateAST(
-  node: ExpressionNode,
-  availableIndicatorKeys: string[],
-  availableFields?: string[]
-): ValidationResult {
   const errors: string[] = []
   const available = new Set(availableIndicatorKeys)
   const fields = availableFields ? new Set(availableFields) : null
@@ -70,22 +62,6 @@ export function validateAST(
 
   walk(node)
   return { valid: errors.length === 0, errors }
-}
-
-export function inferType(node: ExpressionNode): string {
-  if (node.type === "literal") return node.dataType
-  if (node.type === "agg") {
-    if (node.func === "COUNT_DISTINCT" || node.func === "COUNT") return "UInt64"
-    return "Float64"
-  }
-  if (node.type === "call") {
-    if (node.func === "divide" || node.func === "/") return "Float64"
-    if (node.func === "greater" || node.func === "less") return "UInt8"
-    if (node.func === "equals" || node.func === "notEquals") return "UInt8"
-    if (node.func === "concat") return "String"
-    return "Float64"
-  }
-  return "Float64"
 }
 
 export function cloneNode(node: ExpressionNode): ExpressionNode {

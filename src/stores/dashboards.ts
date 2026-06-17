@@ -74,7 +74,6 @@ interface DashboardsStore {
   createDashboard: (name: string) => string
   deleteDashboard: (id: string) => void
   updateDashboard: (id: string, updates: Partial<Pick<Dashboard, "name">>) => void
-  renameDashboard: (id: string, name: string) => void
   setActiveDashboard: (id: string | null) => void
 
   // Save & Publish
@@ -137,13 +136,6 @@ export const useDashboardsStore = create<DashboardsStore>()(
         set((s) => ({
           dashboards: s.dashboards.map((d) =>
             d.id === id ? { ...d, ...updates, updatedAt: Date.now() } : d
-          ),
-        })),
-
-      renameDashboard: (id, name) =>
-        set((s) => ({
-          dashboards: s.dashboards.map((d) =>
-            d.id === id ? { ...d, name, updatedAt: Date.now() } : d
           ),
         })),
 

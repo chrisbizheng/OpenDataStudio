@@ -4,8 +4,10 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 import CodeMirror from "@uiw/react-codemirror"
 import { sql } from "@codemirror/lang-sql"
 import { useLang } from "@/components/lang-provider"
+import { useIsDark } from "@/hooks/use-is-dark"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { widgetCache, type QueryResult } from "@/lib/widget-cache"
+import { executeWidgetQuery } from "@/lib/widget-execution"
 import { vscodeDark, vscodeLight } from "@/lib/vscode-theme-override"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -21,9 +23,6 @@ interface CreateWidgetSqlDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   dashboardId: string
-  tableName?: string | null
-  schema?: { name: string; type: string; comment?: string }[]
-  selectedDatabase?: string | null
 }
 
 function inferVizConfig(columns: string[], rows: unknown[][]): ChartConfig {
@@ -62,15 +61,7 @@ export function CreateWidgetSqlDialog({
 
   const [vizConfig, setVizConfig] = useState<ChartConfig>({ type: "bar", xKey: "", title: "" })
 
-  const [isDark, setIsDark] = useState(true)
-
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
-    check()
-    const obs = new MutationObserver(check)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
-    return () => obs.disconnect()
-  }, [])
+  const isDark = useIsDark()
 
   const activeTheme = isDark ? vscodeDark : vscodeLight
 
@@ -84,21 +75,8 @@ export function CreateWidgetSqlDialog({
     setError(null)
 
     try {
-      const res = await fetch("/api/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sql: sqlText }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || _t("dashboard.refresh_failed"))
-
-      const result: QueryResult = {
-        columns: json.columns,
-        rows: json.rows,
-        fetchedAt: Date.now(),
-      }
-
-      const inferred = inferVizConfig(json.columns, json.rows)
+      const result = await executeWidgetQuery(sqlText)
+      const inferred = inferVizConfig(result.columns, result.rows)
       setVizConfig(inferred)
       setQueryResult(result)
     } catch (e) {
@@ -107,7 +85,7 @@ export function CreateWidgetSqlDialog({
     } finally {
       setRunning(false)
     }
-  }, [sqlText, _t])
+  }, [sqlText])
 
   const handleAddWidget = useCallback(async () => {
     if (!queryResult) return
