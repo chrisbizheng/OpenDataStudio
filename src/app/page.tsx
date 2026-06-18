@@ -67,6 +67,7 @@ function HomeContent() {
     setSearchQuery,
     setPendingAutoExecute,
     loadMore,
+    cancel,
     handleSort,
     handleSqlExecute,
     handleDrilldown,
@@ -180,6 +181,7 @@ function HomeContent() {
                       onSearchChange={setSearchQuery}
                       onLoadMore={loadMore}
                       onExecuteSql={handleSqlExecute}
+                      onCancel={cancel}
                       onSqlGenerated={handleAgentSqlGenerated}
                       onSetPendingAutoExecute={setPendingAutoExecute}
                     />

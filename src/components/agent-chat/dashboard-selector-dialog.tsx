@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { toast } from "sonner"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useDashboardsStore } from "@/stores/dashboards"
@@ -19,16 +20,19 @@ export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: 
   const [showNewInput, setShowNewInput] = useState(false)
   const [newName, setNewName] = useState("")
 
-  const addToDashboard = async (dashboardId: string) => {
+  const addToDashboard = async (dashboardId: string, dashboardName: string) => {
     setAdding(dashboardId)
     try {
       const widget = await createWidgetFromMessage(msg, index)
       if (widget) {
         addWidget(dashboardId, widget)
         onOpenChange(false)
+        toast.success(`${_t("dashboard.added_to")}: ${dashboardName}`)
+      } else {
+        toast.error(_t("dashboard.add_failed"))
       }
-    } catch {
-      // widget-factory not ready yet, fail silently
+    } catch (e) {
+      toast.error(`${_t("dashboard.add_failed")}: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setAdding(null)
     }
@@ -39,7 +43,7 @@ export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: 
     const id = createDashboard(name)
     setShowNewInput(false)
     setNewName("")
-    await addToDashboard(id)
+    await addToDashboard(id, name)
   }
 
   return (
@@ -50,7 +54,7 @@ export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: 
           {dashboards.map((d) => (
             <div key={d.id} className="flex items-center justify-between py-1.5 px-1 rounded hover:bg-muted/40">
               <span className="text-xs truncate flex-1">{d.name}</span>
-              <Button size="xs" variant="outline" onClick={() => addToDashboard(d.id)} disabled={adding === d.id}>
+              <Button size="xs" variant="outline" onClick={() => addToDashboard(d.id, d.name)} disabled={adding === d.id}>
                 {adding === d.id ? "..." : _t("dashboard.add_to")}
               </Button>
             </div>

@@ -12,7 +12,6 @@ import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
 import { IndicatorFormatDialog } from "./indicator-format-dialog"
 import { PivotFilterChip } from "./pivot-filter-chip"
 import { HistoryPanel } from "./history-panel"
-import { SnakeSpinner } from "@/components/snake-spinner"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toPivotHistoryItem } from "@/lib/history-items"
@@ -169,16 +168,26 @@ export function PivotConfigPanel({
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
-        <Button
-          size="sm"
-          className="h-6 text-xs px-2"
-          onClick={handleExecute}
-          disabled={isExecuting}
-        >
-          {isExecuting ? (
-            <SnakeSpinner size={14} />
-          ) : _t("pivot.execute")}
-        </Button>
+        {isExecuting ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-6 text-xs px-2"
+            onClick={() => queryEngine.cancel()}
+            title={_t("sql.stop_hint") || "Cancel running query"}
+          >
+            <span className="inline-block w-2.5 h-2.5 bg-current rounded-sm mr-1" />
+            {_t("sql.stop") || "Stop"}
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="h-6 text-xs px-2"
+            onClick={handleExecute}
+          >
+            {_t("pivot.execute")}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

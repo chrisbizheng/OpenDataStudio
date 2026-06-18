@@ -433,6 +433,17 @@ export function CalculatedIndicatorDialog({
             </code>
           </div>
 
+          {errors.length > 0 && (
+            <div className="rounded border border-destructive/50 bg-destructive/10 p-2 flex flex-col gap-1">
+              {errors.map((err, idx) => (
+                <div key={idx} className="text-xs text-destructive flex items-start gap-1">
+                  <span>⚠</span>
+                  <span className="flex-1">{err}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs">{_t("calc_ind.format")}</Label>

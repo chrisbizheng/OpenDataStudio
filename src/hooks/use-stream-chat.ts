@@ -121,9 +121,12 @@ export function useStreamChat({
 
           case "done": {
             const msgs = getMessages()
+            const finalContent = event.error
+              ? `${event.message}\n\n⚠️ SQL ${_t("agent.sql_error") || "执行失败"}: ${event.error}`
+              : event.message
             msgs[placeholderIndex] = {
               role: "assistant",
-              content: event.message,
+              content: finalContent,
               sql: event.sql ?? undefined,
               rows: event.rows,
               columns: event.columns,
@@ -133,6 +136,9 @@ export function useStreamChat({
             onMessagesChange([...msgs])
             finalSql = event.sql
             finalReasoning = event.reasoning
+            if (event.error) {
+              appLog("[Agent]", getTraceId(), "sql-error:", event.error.slice(0, 200))
+            }
             break
           }
 
@@ -150,6 +156,13 @@ export function useStreamChat({
         const last = msgs[placeholderIndex] as AssistantMessage
         if (!last.content) {
           msgs[placeholderIndex] = { ...last, content: _t("agent.stopped") } as AssistantMessage
+          onMessagesChange([...msgs])
+        }
+      } else {
+        const msgs = getMessages()
+        const last = msgs[placeholderIndex] as AssistantMessage | undefined
+        if (last && !last.content) {
+          msgs[placeholderIndex] = { ...last, content: _t("agent.empty_response") || "服务器返回空响应，请重试" } as AssistantMessage
           onMessagesChange([...msgs])
         }
       }
@@ -170,24 +183,26 @@ export function useStreamChat({
         return next
       })
     } catch (e) {
+      const currentMessages = getMessages()
+      const last = currentMessages[placeholderIndex] as AssistantMessage | undefined
       if (e instanceof DOMException && e.name === "AbortError") {
-        const currentMessages = getMessages()
-        const last = currentMessages[placeholderIndex] as AssistantMessage
-        if (!last.content) {
+        if (last && !last.content) {
           currentMessages[placeholderIndex] = { ...last, content: _t("agent.stopped") } as AssistantMessage
           onMessagesChange([...currentMessages])
         }
       } else {
-        onMessagesChange([
-          ...getMessages(),
-          { role: "assistant", content: `Network error: ${e instanceof Error ? e.message : "Unknown"}` },
-        ])
+        const errMsg = `${_t("agent.network_error") || "Network error"}: ${e instanceof Error ? e.message : "Unknown"}`
+        if (last) {
+          currentMessages[placeholderIndex] = { ...last, content: errMsg } as AssistantMessage
+          onMessagesChange([...currentMessages])
+        } else {
+          onMessagesChange([...currentMessages, { role: "assistant", content: errMsg }])
+        }
       }
       onMessageUIChange((prev) => {
         const next = new Map(prev)
-        const pi = prev.size > 0 ? Math.max(...prev.keys()) : 0
-        const existing = next.get(pi) ?? {}
-        next.set(pi, {
+        const existing = next.get(placeholderIndex) ?? {}
+        next.set(placeholderIndex, {
           thinkingExpanded: false,
           thinkingStartTime: existing.thinkingStartTime,
           thinkingElapsedMs: existing.thinkingStartTime ? Date.now() - existing.thinkingStartTime : undefined,

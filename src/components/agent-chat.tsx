@@ -52,7 +52,7 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
         ))}
         <InitialSuggestions isLoading={isLoading} messagesLength={messages.length} tableName={tableName} suggestions={suggestions} aiInitialQuestions={aiInitialQuestions} isGeneratingInitialQuestions={isGeneratingInitialQuestions} onSend={sendMessage} onGenerateAiQuestions={generateAiQuestions} _t={_t} lang={lang} />
       </div>
-      <InputBar input={input} isLoading={isLoading} hasAbort={isLoading} onInputChange={setInput} onSend={sendMessage} onStop={stopGeneration} _t={_t} lang={lang} />
+      <InputBar input={input} isLoading={isLoading} onInputChange={setInput} onSend={sendMessage} onStop={stopGeneration} _t={_t} lang={lang} />
     </div>
   )
 }

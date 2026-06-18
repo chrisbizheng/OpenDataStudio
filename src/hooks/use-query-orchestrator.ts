@@ -121,6 +121,11 @@ export function useQueryOrchestrator() {
     [queryLifecycle]
   )
 
+  const cancel = useCallback(
+    () => queryLifecycle.cancel(),
+    [queryLifecycle]
+  )
+
   const filteredRows = queryLifecycle.getFilteredRows()
 
   return {
@@ -140,6 +145,7 @@ export function useQueryOrchestrator() {
     setSearchQuery,
     setPendingAutoExecute: (sql: string | null) => queryLifecycle.setPendingAutoExecute(sql),
     loadMore,
+    cancel,
     handleSort,
     handleSqlExecute,
     handleDrilldown,

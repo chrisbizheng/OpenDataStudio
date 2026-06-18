@@ -50,11 +50,12 @@ function buildTableSql(
   database: string,
   table: string,
   stableOrder: StableOrder | null,
-  limit = 1000
+  limit = 1000,
+  offset = 0
 ): string {
   const qualified = `${escapeField(database)}.${escapeField(table)}`
   const orderBy = stableOrder ? ` ORDER BY ${escapeField(stableOrder.field)} ${stableOrder.direction}` : ""
-  return `SELECT * FROM ${qualified}${orderBy} LIMIT ${limit}`
+  return `SELECT * FROM ${qualified}${orderBy} LIMIT ${limit}${offset > 0 ? ` OFFSET ${offset}` : ""}`
 }
 
 function buildSortedSql(
@@ -62,10 +63,11 @@ function buildSortedSql(
   table: string,
   column: string,
   direction: "ASC" | "DESC",
-  limit = 1000
+  limit = 1000,
+  offset = 0
 ): string {
   const qualified = `${escapeField(database)}.${escapeField(table)}`
-  return `SELECT * FROM ${qualified} ORDER BY ${escapeField(column)} ${direction} LIMIT ${limit}`
+  return `SELECT * FROM ${qualified} ORDER BY ${escapeField(column)} ${direction} LIMIT ${limit}${offset > 0 ? ` OFFSET ${offset}` : ""}`
 }
 
 function matchRow(row: unknown[], query: string): boolean {
@@ -250,12 +252,18 @@ export class QueryLifecycle {
   }
 
   async loadMore(): Promise<void> {
-    const { currentTable, currentSchema } = this._state
+    const { currentTable, currentSchema, sort, loadedRows } = this._state
     if (!currentTable) return
     const db = currentTable.split(".")[0] || ""
     const table = currentTable.split(".")[1] || currentTable
-    const stableOrder = inferStableOrder(currentSchema)
-    const sql = buildTableSql(db, table, stableOrder)
+    const offset = loadedRows
+    let sql: string
+    if (sort.column && sort.direction) {
+      sql = buildSortedSql(db, table, sort.column, sort.direction.toUpperCase() as "ASC" | "DESC", 1000, offset)
+    } else {
+      const stableOrder = inferStableOrder(currentSchema)
+      sql = buildTableSql(db, table, stableOrder, 1000, offset)
+    }
     await this.execute(sql, currentTable, true)
   }
 }

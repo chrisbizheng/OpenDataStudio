@@ -38,15 +38,23 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-xs text-muted-foreground max-w-md text-center">
             {this.state.error?.message || "An unexpected error occurred"}
           </p>
-          <button
-            onClick={() => {
-              this.setState({ hasError: false, error: null })
-              window.location.reload()
-            }}
-            className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 mt-2"
-          >
-            {t("error.reload", lang)}
-          </button>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="text-xs px-3 py-1.5 rounded border border-border hover:bg-muted transition-colors"
+            >
+              {t("error.retry", lang)}
+            </button>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null })
+                window.location.reload()
+              }}
+              className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              {t("error.reload", lang)}
+            </button>
+          </div>
         </div>
       )
     }

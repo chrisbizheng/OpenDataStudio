@@ -27,6 +27,7 @@ export function DashboardList() {
     "dashboard.list.new": { zh: "新建", en: "New" },
     "dashboard.list.empty": { zh: "暂无仪表盘", en: "No dashboards" },
     "dashboard.list.defaultName": { zh: "未命名仪表盘", en: "Untitled Dashboard" },
+    "dashboard.list.confirm_delete": { zh: "确定删除该仪表盘？此操作不可撤销。", en: "Delete this dashboard? This cannot be undone." },
   };
 
   const t = (key: string) => dict[key]?.[lang] ?? key;
@@ -130,7 +131,9 @@ export function DashboardList() {
                         className="h-5 w-5 p-0 text-destructive hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteDashboard(db.id);
+                          if (window.confirm(t("dashboard.list.confirm_delete"))) {
+                            deleteDashboard(db.id);
+                          }
                         }}
                       >
                         <Trash2 className="h-3 w-3" />

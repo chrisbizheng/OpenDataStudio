@@ -101,6 +101,7 @@ export function DataGrid({
   })
 
   if (rows.length === 0) {
+    const hasSearch = !!searchQuery && searchQuery.trim().length > 0
     return (
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-2 shrink-0">
@@ -109,8 +110,16 @@ export function DataGrid({
             <span className="text-[10px] text-muted-foreground shrink-0" title={_t("grid.window_search")}>{_t("grid.window_search")}</span>
           )}
         </div>
-          <div className="flex items-center justify-center flex-1 text-sm text-muted-foreground">
-            {_t("grid.no_rows")}
+          <div className="flex flex-col items-center justify-center flex-1 text-sm text-muted-foreground gap-2">
+            <span>{hasSearch ? _t("grid.no_search_results") : _t("grid.no_rows")}</span>
+            {hasSearch && onSearchChange && (
+              <button
+                onClick={() => onSearchChange("")}
+                className="text-xs text-primary hover:underline"
+              >
+                {_t("grid.clear_search")}
+              </button>
+            )}
           </div>
       </div>
     )

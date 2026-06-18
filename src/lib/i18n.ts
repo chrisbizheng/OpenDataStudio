@@ -36,6 +36,8 @@ const dict: Record<string, { zh: string; en: string }> = {
   "field.role.drop_invalid": { zh: "该字段不能放入此区", en: "This field cannot be dropped here" },
   // Data grid
   "grid.no_rows": { zh: "无返回行", en: "No rows returned" },
+  "grid.no_search_results": { zh: "搜索无结果", en: "No search results" },
+  "grid.clear_search": { zh: "清除搜索", en: "Clear search" },
   "grid.load_more": { zh: "加载下 1,000 行", en: "Load next 1,000 rows" },
   "grid.loading": { zh: "加载中...", en: "Loading..." },
   "grid.rows": { zh: "行", en: "rows" },
@@ -113,6 +115,7 @@ const dict: Record<string, { zh: string; en: string }> = {
   // Error boundary
   "error.title": { zh: "出现错误", en: "Something went wrong" },
   "error.reload": { zh: "重新加载", en: "Reload" },
+  "error.retry": { zh: "重试", en: "Retry" },
   // Main
   "main.select_table": { zh: "从侧边栏选择表开始", en: "Select a table from the sidebar to get started" },
   "main.select_hint": { zh: "← 从左侧选择数据库", en: "← Select a database from the left" },
@@ -205,6 +208,8 @@ const dict: Record<string, { zh: string; en: string }> = {
   "dashboard.select_dashboard": { zh: "选择仪表盘", en: "Select Dashboard" },
   "dashboard.create_new": { zh: "新建仪表盘", en: "New Dashboard" },
   "dashboard.added_success": { zh: "已添加", en: "Added" },
+  "dashboard.added_to": { zh: "已添加到仪表盘", en: "Added to dashboard" },
+  "dashboard.add_failed": { zh: "添加失败", en: "Failed to add" },
   "dashboard.back_to_chat": { zh: "回到对话", en: "Back to Chat" },
   "dashboard.empty_title": { zh: "暂无仪表盘", en: "No Dashboards" },
   "dashboard.empty_hint": { zh: "创建一个仪表盘开始", en: "Create a dashboard to get started" },

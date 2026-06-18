@@ -1,9 +1,8 @@
 "use client"
 
-export function InputBar({ input, isLoading, hasAbort, onInputChange, onSend, onStop, _t, lang }: {
+export function InputBar({ input, isLoading, onInputChange, onSend, onStop, _t, lang }: {
   input: string
   isLoading: boolean
-  hasAbort: boolean
   onInputChange: (v: string) => void
   onSend: (text: string) => void
   onStop: () => void
@@ -25,7 +24,7 @@ export function InputBar({ input, isLoading, hasAbort, onInputChange, onSend, on
             }
           }}
           placeholder={_t("agent.placeholder")}
-          disabled={isLoading && !hasAbort}
+          disabled={isLoading}
           aria-label={_t("agent.placeholder")}
           className="flex-1 px-2 py-1.5 text-xs rounded border border-border bg-background text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-ring disabled:opacity-50"
         />

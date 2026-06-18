@@ -26,6 +26,7 @@ interface GridViewProps {
   onSearchChange: (query: string) => void
   onLoadMore: () => void
   onExecuteSql: (sql: string) => void
+  onCancel?: () => void
   onSqlGenerated: (sql: string) => void
   onSetPendingAutoExecute: (sql: string | null) => void
 }
@@ -46,6 +47,7 @@ export function GridView({
   onSearchChange,
   onLoadMore,
   onExecuteSql,
+  onCancel,
   onSqlGenerated,
   onSetPendingAutoExecute,
 }: GridViewProps) {
@@ -106,6 +108,7 @@ export function GridView({
           sql={sqlText}
           onSqlChange={setSqlText}
           onExecute={onExecuteSql}
+          onCancel={onCancel}
           onSave={handleSave}
           isExecuting={isExecuting}
           tableName={selectedTable}

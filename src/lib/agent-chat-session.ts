@@ -22,7 +22,7 @@ export interface ChatSessionDeps {
 export type ChatEvent =
   | { type: "token"; content: string }
   | { type: "partial"; message: string; sql?: string }
-  | { type: "done"; message: string; sql: string | null; rows: unknown[][]; columns: string[]; visualization: VisualizationConfig | null; reasoning?: string }
+  | { type: "done"; message: string; sql: string | null; rows: unknown[][]; columns: string[]; visualization: VisualizationConfig | null; reasoning?: string; error?: string }
   | { type: "error"; message: string }
 
 async function* parseSSEStream(
@@ -128,6 +128,7 @@ export async function* runChatSession(
           columns: doneFrame.columns || [],
           visualization: doneFrame.visualization ?? null,
           reasoning: doneFrame.reasoning,
+          error: doneFrame.error,
         }
         return
       }

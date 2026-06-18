@@ -15,6 +15,7 @@ interface SqlConsoleProps {
   sql: string
   onSqlChange: (sql: string) => void
   onExecute: (sql: string) => void
+  onCancel?: () => void
   onSave: (sql: string) => void
   isExecuting: boolean
   tableName?: string | null
@@ -26,6 +27,7 @@ export function SqlConsole({
   sql: sqlText,
   onSqlChange,
   onExecute,
+  onCancel,
   onSave,
   isExecuting,
   tableName,
@@ -96,18 +98,29 @@ export function SqlConsole({
         .cm-scroller { overflow: auto !important; }
       `}</style>
       <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
-        <button
-          onClick={() => onExecute(sqlText)}
-          disabled={isExecuting || !sqlText.trim()}
-          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {isExecuting ? (
-            <span className="inline-block w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
-          ) : (
-            "▶"
-          )}
-          {_t("sql.run")}
-        </button>
+        {isExecuting && onCancel ? (
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            title={_t("sql.stop_hint") || "Cancel running query"}
+          >
+            <span className="inline-block w-2.5 h-2.5 bg-current rounded-sm" />
+            {_t("sql.stop") || "Stop"}
+          </button>
+        ) : (
+          <button
+            onClick={() => onExecute(sqlText)}
+            disabled={isExecuting || !sqlText.trim()}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {isExecuting ? (
+              <span className="inline-block w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
+            ) : (
+              "▶"
+            )}
+            {_t("sql.run")}
+          </button>
+        )}
         <button
           onClick={() => onSave(sqlText)}
           disabled={!sqlText.trim()}
