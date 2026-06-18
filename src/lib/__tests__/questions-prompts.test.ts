@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseAiQuestions } from "../ai-questions"
+import { parseAiQuestions } from "../prompts/questions"
 
 describe("parseAiQuestions", () => {
   it("从 LLM JSON 中提取最多 5 条有效问题", () => {

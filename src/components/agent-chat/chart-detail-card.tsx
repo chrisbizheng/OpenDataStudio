@@ -3,8 +3,8 @@
 import type { AssistantMessage } from "@/lib/agent-types"
 import type { DeepDiveItem } from "@/lib/deep-dive-directions"
 import { useChartDetailStore } from "@/stores/chart-detail"
-import { getChartNodeContext } from "@/lib/chart-node-context"
 import { suggestDeepDiveDirections } from "@/lib/deep-dive-directions"
+import { getChartNodeContext } from "./chart-node-context"
 
 export function ChartDetailCard({ msg, index, schema, lang, _t, onGenerateAiDirections, onSendMessage }: {
   msg: AssistantMessage

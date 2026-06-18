@@ -142,7 +142,8 @@ export class QueryLifecycle {
 
   async execute(sql: string, tableName: string, append = false): Promise<void> {
     this.cancel()
-    this.controller = new AbortController()
+    const controller = new AbortController()
+    this.controller = controller
 
     if (!append) {
       this.setState({
@@ -155,7 +156,8 @@ export class QueryLifecycle {
     }
 
     try {
-      const result = await this.deps.executeSql(sql, undefined, this.controller.signal)
+      const result = await this.deps.executeSql(sql, undefined, controller.signal)
+      if (controller.signal.aborted) return
       if (!result) return
 
       if (append && this._state.data) {
@@ -174,21 +176,27 @@ export class QueryLifecycle {
         })
       }
     } catch (e) {
+      if (controller.signal.aborted) return
       if (e instanceof DOMException && e.name === "AbortError") return
       this.setState({
         error: e instanceof Error ? e.message : "Network error",
         status: "error",
       })
     } finally {
-      if (this.controller?.signal.aborted === false) {
+      if (this.controller === controller) {
         this.controller = null
       }
     }
   }
 
   cancel(): void {
-    this.controller?.abort()
-    this.controller = null
+    if (this.controller) {
+      this.controller.abort()
+      this.controller = null
+      if (this._state.status === "executing") {
+        this.setState({ status: "idle" })
+      }
+    }
   }
 
   async executeDefaultTable(database: string, table: string, schema: ColumnMeta[]): Promise<void> {

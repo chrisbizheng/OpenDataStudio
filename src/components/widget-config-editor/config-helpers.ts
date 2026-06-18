@@ -1,4 +1,4 @@
-import type { ChartConfig } from "@/lib/chart-helpers"
+import type { ChartConfig } from "@/lib/chart-types"
 
 export const NO_AXIS_TYPES = ["pie", "treemap", "radar", "radialBar"]
 

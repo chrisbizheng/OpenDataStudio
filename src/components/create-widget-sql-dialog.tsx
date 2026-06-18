@@ -6,7 +6,7 @@ import { sql } from "@codemirror/lang-sql"
 import { useLang } from "@/components/lang-provider"
 import { useIsDark } from "@/hooks/use-is-dark"
 import { useDashboardsStore } from "@/stores/dashboards"
-import { widgetCache, type QueryResult } from "@/lib/widget-cache"
+import { widgetCache, type CachedQueryResult } from "@/lib/widget-cache"
 import { executeWidgetQuery } from "@/lib/widget-execution"
 import { vscodeDark, vscodeLight } from "@/lib/vscode-theme-override"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -15,8 +15,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { ChartConfig } from "@/lib/chart-helpers"
-import type { SeriesConfig } from "@/lib/agent-types"
+import type { ChartConfig } from "@/lib/chart-types"
+import type { SeriesConfig } from "@/lib/chart-types"
 import { CHART_TYPE_OPTIONS } from "@/lib/chart-constants"
 
 interface CreateWidgetSqlDialogProps {
@@ -57,7 +57,7 @@ export function CreateWidgetSqlDialog({
   const [sqlText, setSqlText] = useState("")
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [queryResult, setQueryResult] = useState<QueryResult | null>(null)
+  const [queryResult, setQueryResult] = useState<CachedQueryResult | null>(null)
 
   const [vizConfig, setVizConfig] = useState<ChartConfig>({ type: "bar", xKey: "", title: "" })
 

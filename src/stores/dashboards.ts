@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { ChartConfig } from "@/lib/chart-helpers"
+import type { ChartConfig } from "@/lib/chart-types"
 
 // ── Widget types (discriminated union, MVP only chart) ──
 
@@ -95,6 +95,18 @@ interface DashboardsStore {
   clearFilters: (dashboardId: string) => void
 }
 
+function updateOneAndTouch(
+  dashboards: Dashboard[],
+  id: string,
+  updater: (d: Dashboard) => Partial<Dashboard>
+): Dashboard[] {
+  return dashboards.map((d) =>
+    d.id === id
+      ? { ...d, ...updater(d), updatedAt: Date.now() }
+      : d
+  )
+}
+
 export const useDashboardsStore = create<DashboardsStore>()(
   persist(
     (set, get) => ({
@@ -134,9 +146,7 @@ export const useDashboardsStore = create<DashboardsStore>()(
 
       updateDashboard: (id, updates) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) =>
-            d.id === id ? { ...d, ...updates, updatedAt: Date.now() } : d
-          ),
+          dashboards: updateOneAndTouch(s.dashboards, id, () => updates),
         })),
 
       setActiveDashboard: (id) => set({ activeDashboardId: id }),
@@ -171,15 +181,9 @@ export const useDashboardsStore = create<DashboardsStore>()(
 
       unpublishDashboard: (id) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) =>
-            d.id === id
-              ? {
-                  ...d,
-                  status: "draft" as DashboardStatus,
-                  updatedAt: Date.now(),
-                }
-              : d
-          ),
+          dashboards: updateOneAndTouch(s.dashboards, id, () => ({
+            status: "draft" as DashboardStatus,
+          })),
         })),
 
       isDirty: (id) => {
@@ -193,111 +197,83 @@ export const useDashboardsStore = create<DashboardsStore>()(
 
       addWidget: (dashboardId, widget) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return {
-              ...d,
-              widgets: [...d.widgets, widget],
-              layout: [
-                ...d.layout,
-                {
-                  i: widget.id,
-                  x: 0,
-                  y: Infinity,
-                  w: 6,
-                  h: 4,
-                  minW: 2,
-                  minH: 2,
-                },
-              ],
-              updatedAt: Date.now(),
-            }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            widgets: [...d.widgets, widget],
+            layout: [
+              ...d.layout,
+              { i: widget.id, x: 0, y: Infinity, w: 6, h: 4, minW: 2, minH: 2 },
+            ],
+          })),
         })),
 
       removeWidget: (dashboardId, widgetId) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return {
-              ...d,
-              widgets: d.widgets.filter((w) => w.id !== widgetId),
-              layout: d.layout.filter((l) => l.i !== widgetId),
-              updatedAt: Date.now(),
-            }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            widgets: d.widgets.filter((w) => w.id !== widgetId),
+            layout: d.layout.filter((l) => l.i !== widgetId),
+          })),
         })),
 
       updateLayout: (dashboardId, layout) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return { ...d, layout, updatedAt: Date.now() }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, () => ({
+            layout,
+          })),
         })),
 
       updateWidgetLastRunAt: (dashboardId, widgetId, timestamp) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return {
-              ...d,
-              widgets: d.widgets.map((w) =>
-                w.id === widgetId ? { ...w, lastRunAt: timestamp } : w
-              ),
-              updatedAt: Date.now(),
-            }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            widgets: d.widgets.map((w) =>
+              w.id === widgetId ? { ...w, lastRunAt: timestamp } : w
+            ),
+          })),
         })),
 
       updateWidget: (dashboardId, widgetId, updates) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return {
-              ...d,
-              widgets: d.widgets.map((w) =>
-                w.id === widgetId ? { ...w, ...updates } : w
-              ),
-              updatedAt: Date.now(),
-            }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            widgets: d.widgets.map((w) =>
+              w.id === widgetId ? { ...w, ...updates } : w
+            ),
+          })),
         })),
 
       // ── Filter management (Phase 4 stubs) ──
 
       addFilter: (dashboardId, filter) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return {
-              ...d,
-              filters: [...d.filters, filter],
-              updatedAt: Date.now(),
-            }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            filters: [...d.filters, filter],
+          })),
         })),
 
       removeFilter: (dashboardId, filterId) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return {
-              ...d,
-              filters: d.filters.filter((f) => f.id !== filterId),
-              updatedAt: Date.now(),
-            }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            filters: d.filters.filter((f) => f.id !== filterId),
+          })),
         })),
 
       clearFilters: (dashboardId) =>
         set((s) => ({
-          dashboards: s.dashboards.map((d) => {
-            if (d.id !== dashboardId) return d
-            return { ...d, filters: [], updatedAt: Date.now() }
-          }),
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, () => ({
+            filters: [],
+          })),
         })),
     }),
-    { name: "dashboards" }
+    {
+      name: "dashboards",
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        // 验证 activeDashboardId 是否仍指向真实存在的 dashboard，防止被删后悬挂
+        if (
+          state.activeDashboardId &&
+          !state.dashboards.some((d) => d.id === state.activeDashboardId)
+        ) {
+          state.activeDashboardId = null
+        }
+      },
+    }
   )
 )

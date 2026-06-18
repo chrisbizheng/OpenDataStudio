@@ -5,15 +5,15 @@
  * create-widget-sql-dialog.tsx (handleRunSql) which had identical
  * fetch /api/query → parse JSON → build QueryResult patterns.
  */
-import type { QueryResult } from "@/lib/widget-cache"
+import type { CachedQueryResult } from "@/lib/widget-cache"
 
 /**
- * Execute a SQL query via the /api/query route and return a QueryResult
+ * Execute a SQL query via the /api/query route and return a CachedQueryResult
  * suitable for widget cache storage.
  *
  * @throws Error if the API returns a non-OK status or the response is malformed.
  */
-export async function executeWidgetQuery(sql: string): Promise<QueryResult> {
+export async function executeWidgetQuery(sql: string): Promise<CachedQueryResult> {
   const res = await fetch("/api/query", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

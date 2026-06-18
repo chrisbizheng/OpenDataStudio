@@ -1,5 +1,5 @@
-import type { DeepDiveItem } from "./deep-dive-directions"
-import type { VisualizationConfig } from "./agent-types"
+import type { DeepDiveItem } from "@/lib/deep-dive-directions"
+import type { VisualizationConfig } from "@/lib/chart-types"
 
 export interface ChartNodeContextInput {
   item: DeepDiveItem

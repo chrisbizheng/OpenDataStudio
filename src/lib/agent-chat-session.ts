@@ -7,8 +7,8 @@ import type {
   SSEErrorFrame,
   SSEFrame,
   SSETokenFrame,
-  VisualizationConfig,
 } from "./agent-types"
+import type { VisualizationConfig } from "./chart-types"
 import { buildLlmHeaders } from "./llm-client"
 import { getTraceId } from "./client-logger"
 import { extractField } from "./llm-response"

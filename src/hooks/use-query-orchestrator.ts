@@ -7,6 +7,7 @@ import { useData } from "@/components/data-provider"
 import { pageData } from "@/lib/catalog"
 import type { QueryLifecycleState } from "@/lib/query-lifecycle"
 import type { ColumnMeta } from "@/lib/types"
+import { escapeField, escapeValue } from "@/lib/sql-utils"
 
 const EMPTY_SCHEMA: ColumnMeta[] = []
 
@@ -94,8 +95,11 @@ export function useQueryOrchestrator() {
     }) => {
       if (!selectedTable || !selectedDatabase)
         return { columns: [] as string[], rows: [] as unknown[][], isLoading: false }
-      const { buildDrilldownSql } = await import("@/lib/query-builder")
-      const sql = buildDrilldownSql(selectedDatabase, selectedTable, params.dimensionValues)
+      const qualified = `${escapeField(selectedDatabase)}.${escapeField(selectedTable)}`
+      const conditions = Object.entries(params.dimensionValues)
+        .map(([k, v]) => `${escapeField(k)} = ${escapeValue(v)}`)
+        .join(" AND ")
+      const sql = `SELECT * FROM ${qualified}${conditions ? ` WHERE ${conditions}` : ""} LIMIT 10000`
       try {
         const json = await queryEngine.execute(sql, selectedDatabase)
         if (!json) return { columns: [] as string[], rows: [] as unknown[][], isLoading: false }

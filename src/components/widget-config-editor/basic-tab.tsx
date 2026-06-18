@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { useLang } from "@/components/lang-provider"
 import { CHART_TYPE_OPTIONS } from "@/lib/chart-constants"
-import type { SeriesConfig } from "@/lib/agent-types"
+import type { SeriesConfig } from "@/lib/chart-types"
 import type { TabSharedProps } from "./config-helpers"
 import { SeriesConfigEditor } from "./series-config-editor"
 

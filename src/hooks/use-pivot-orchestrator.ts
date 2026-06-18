@@ -55,10 +55,9 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
   const addFieldAsIndicator = useCallback(
     (field: string) => {
       const meta = schema.find((s) => s.name === field)
-      const indicators = usePivotStore.getState().indicators
-      addIndicator(buildNextPivotIndicator(field, meta?.comment || field, indicators, meta?.type))
+      addIndicator(buildNextPivotIndicator(field, meta?.comment || field, store.indicators, meta?.type))
     },
-    [schema, addIndicator]
+    [schema, addIndicator, store.indicators]
   )
 
   const resolveDragDrop = useCallback(

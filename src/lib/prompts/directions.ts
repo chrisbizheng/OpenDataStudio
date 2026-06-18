@@ -8,3 +8,20 @@ const PROMPTS: Record<Lang, string> = {
 export function buildDirectionsSystemPrompt(lang: Lang): string {
   return PROMPTS[lang]
 }
+
+export function parseDirections(content: string): { label: string; prompt: string }[] {
+  let parsed: { directions?: unknown } = {}
+  try {
+    parsed = JSON.parse(content) as { directions?: unknown }
+  } catch {
+    return []
+  }
+  const directions = Array.isArray(parsed.directions) ? parsed.directions : []
+  return directions
+    .map((item) => {
+      const d = item as { label?: unknown; prompt?: unknown }
+      return { label: String(d.label ?? ""), prompt: String(d.prompt ?? "") }
+    })
+    .filter((d) => d.label.trim() && d.prompt.trim())
+    .slice(0, 4)
+}

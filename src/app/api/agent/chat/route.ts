@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { executeReadOnly, isReadOnlySql, formatSql } from "@/lib/clickhouse"
 import { logger } from "@/lib/logger"
-import { streamLLM } from "@/lib/sse-writer"
-import { parseResponse } from "@/lib/llm-response"
-import { fixVisualization, inferVisualization } from "@/lib/viz-fix"
 import { fixConcatSql } from "@/lib/sql-utils"
 import { parseLlmConfigFromHeader } from "@/lib/llm-client"
 import { buildChatSystemPrompt } from "@/lib/prompts/chat"
@@ -46,16 +43,12 @@ export async function POST(request: NextRequest) {
           const pipeline = runAgentPipeline(
             { messages, context, lang, llmConfig },
             {
-              streamLLM,
               executeSql: async (sql) => {
                 const result = await executeReadOnly(sql)
                 return { columns: result.columns, rows: result.rows }
               },
               formatSql,
               buildSystemPrompt: buildChatSystemPrompt,
-              parseResponse,
-              fixVisualization,
-              inferVisualization,
               fixConcatSql,
               isReadOnlySql,
             }

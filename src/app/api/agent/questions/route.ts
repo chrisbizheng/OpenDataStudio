@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { parseAiQuestions } from "@/lib/ai-questions"
-import { buildQuestionsSystemPrompt } from "@/lib/prompts/questions"
+import { buildQuestionsSystemPrompt, parseAiQuestions } from "@/lib/prompts/questions"
 import { handleAgentRoute } from "@/lib/agent-route-handler"
 
 export const runtime = "nodejs"

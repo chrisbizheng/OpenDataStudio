@@ -6,8 +6,8 @@ import { useTheme } from "@/components/theme-provider"
 import {
   buildEChartsOption,
   prepareChartData,
-  type ChartConfig,
 } from "@/lib/chart-helpers"
+import type { ChartConfig } from "@/lib/chart-types"
 
 interface ChartProps {
   data: Record<string, unknown>[]

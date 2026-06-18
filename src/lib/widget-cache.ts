@@ -6,23 +6,23 @@
  */
 import { get, set, del } from "idb-keyval"
 
-export interface QueryResult {
+export interface CachedQueryResult {
   columns: string[]
   rows: unknown[][]
   fetchedAt: number
 }
 
 export const widgetCache = {
-  async get(widgetId: string): Promise<QueryResult | null> {
+  async get(widgetId: string): Promise<CachedQueryResult | null> {
     try {
-      return (await get<QueryResult>(widgetId)) ?? null
+      return (await get<CachedQueryResult>(widgetId)) ?? null
     } catch (e) {
       console.warn("[widget-cache] IndexedDB read failed, returning null:", e)
       return null
     }
   },
 
-  async set(widgetId: string, result: QueryResult): Promise<void> {
+  async set(widgetId: string, result: CachedQueryResult): Promise<void> {
     await set(widgetId, result)
   },
 

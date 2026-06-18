@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildFilteredSql } from "@/components/chart-widget-renderer"
+import { buildFilteredSql } from "@/lib/widget-filter-sql"
 import type { DashboardFilter } from "@/stores/dashboards"
 
 describe("buildFilteredSql", () => {

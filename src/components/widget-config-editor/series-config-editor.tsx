@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { useLang } from "@/components/lang-provider"
-import type { SeriesConfig } from "@/lib/agent-types"
+import type { SeriesConfig } from "@/lib/chart-types"
 
 interface SeriesConfigEditorProps {
   series: SeriesConfig[] | undefined

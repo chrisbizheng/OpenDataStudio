@@ -1,3 +1,5 @@
+import type { VisualizationConfig } from "./chart-types"
+
 export interface LlmConfig {
   provider: string
   apiKey: string
@@ -11,11 +13,6 @@ export interface ChatContext {
   database: string | null | undefined
 }
 
-export interface UserMessage {
-  role: "user"
-  content: string
-}
-
 export interface AssistantMessage {
   role: "assistant"
   content: string
@@ -26,30 +23,12 @@ export interface AssistantMessage {
   reasoning?: string
 }
 
-export type Message = UserMessage | AssistantMessage
+export type Message = { role: "user"; content: string } | AssistantMessage
 
 export interface MessageUIState {
   thinkingExpanded?: boolean
   thinkingStartTime?: number
   thinkingElapsedMs?: number
-}
-
-export interface SeriesConfig {
-  yKey: string
-  chartType?: string
-  label?: string
-}
-
-export interface VisualizationConfig {
-  type: string
-  config: {
-    xKey: string
-    yKey?: string
-    series?: SeriesConfig[]
-    title?: string
-    showLegend?: boolean
-    height?: number
-  }
 }
 
 export interface SSETokenFrame {
@@ -74,20 +53,3 @@ export interface SSEErrorFrame {
 }
 
 export type SSEFrame = SSETokenFrame | SSEDoneFrame | SSEErrorFrame
-
-export interface SSEEvent {
-  type: "token" | "done" | "error"
-  data: Record<string, unknown>
-}
-
-export type RawViz = {
-  type?: string
-  config?: {
-    xKey?: string
-    yKey?: string
-    series?: SeriesConfig[]
-    title?: string
-    showLegend?: boolean
-    height?: number
-  }
-} | null | undefined
