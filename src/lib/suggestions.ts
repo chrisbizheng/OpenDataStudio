@@ -1,5 +1,6 @@
 import type { ColumnMeta } from "./types"
 import { isMetricByName, isMetricColumn, isIndicatorType, isDimensionType, unwrapNullable } from "./column-type-classifier"
+import { parseGroupByColumns } from "./sql-clause-parser"
 
 export function suggestQuestions(schema: ColumnMeta[], lang: string): string[] {
   const suggestions: string[] = []
@@ -40,13 +41,9 @@ export function suggestFollowUp(
 ): string[] {
   const isZh = lang === "zh"
   const suggestions: string[] = []
-  const sql = (agentSql || "").toUpperCase()
   const cols = columns || []
 
-  const groupMatch = agentSql?.match(/\bGROUP\s+BY\b\s+([\s\S]+?)(?:\bORDER\b|\bLIMIT\b|\bHAVING\b|$)/i)
-  const groupCols = groupMatch
-    ? groupMatch[1].split(",").map((c) => c.trim().replace(/^`|`$/g, "").replace(/\s+AS\s+\S+$/i, "").trim()).filter(Boolean)
-    : []
+  const groupCols = parseGroupByColumns(agentSql || "")
 
   const metricCols = cols.filter((c) => isMetricColumn(c))
   const dimCols = cols.filter((c) => !isMetricColumn(c))

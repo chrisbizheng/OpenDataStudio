@@ -1,12 +1,15 @@
 import { useMemo, useCallback } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { usePivotStore } from "@/stores/pivot"
+import { usePivotStore, validatePivotExecution } from "@/stores/pivot"
+import { usePivotHistoryStore } from "@/stores/pivot-history"
 import { buildPivotConfig } from "@/stores/pivot"
 import { useFieldRoleStore } from "@/stores/field-role"
 import { generatePivotSQL } from "@/lib/pivot-sql"
 import { buildNextPivotIndicator } from "@/lib/pivot-client-utils"
-import { resolveFieldRole } from "@/lib/column-type-classifier"
+import { resolveFieldRole, classifyColumnType } from "@/lib/column-type-classifier"
 import { resolveDrop, type PivotDragItem, type PivotDropZone } from "@/lib/pivot-dnd"
+import { runPivotExecution } from "@/lib/pivot-execution"
+import { useData } from "@/components/data-provider"
 import type { ColumnMeta } from "@/lib/types"
 
 export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, database: string) {
@@ -18,13 +21,20 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
     filters: s.filters,
     sort: s.sort,
     totals: s.totals,
+    isExecuting: s.isExecuting,
   })))
 
   const addRow = usePivotStore((s) => s.addRow)
   const addColumn = usePivotStore((s) => s.addColumn)
   const addIndicator = usePivotStore((s) => s.addIndicator)
   const addFilter = usePivotStore((s) => s.addFilter)
+  const setExecuting = usePivotStore((s) => s.setExecuting)
+  const setError = usePivotStore((s) => s.setError)
+  const setResultData = usePivotStore((s) => s.setResultData)
+  const setLastSQL = usePivotStore((s) => s.setLastSQL)
   const roleOverrides = useFieldRoleStore((s) => s.overrides)
+  const { queryEngine } = useData()
+  const { addEntry } = usePivotHistoryStore()
 
   const pivotConfig = useMemo(() => buildPivotConfig(store), [store])
 
@@ -42,7 +52,7 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
       const resolved = getResolvedRole(field)
       const meta = schema.find((s) => s.name === field)
       if (!resolved || !meta) return
-      const isRange = resolved.role === "indicator" || /^Date/.test(meta.type.replace(/^Nullable\((.+)\)$/, "$1"))
+      const isRange = resolved.role === "indicator" || classifyColumnType(meta.type) === "date"
       addFilter({
         field,
         op: isRange ? "BETWEEN" : "IN",
@@ -72,6 +82,50 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
     [addRow, addColumn, addFieldAsIndicator, addFieldAsFilter]
   )
 
+  const executePivot = useCallback(async () => {
+    const validationError = validatePivotExecution(store, tableName, database)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    for await (const event of runPivotExecution(
+      { config: pivotConfig, tableName, database },
+      { executeSql: (sql, db) => queryEngine.execute(sql, db) }
+    )) {
+      switch (event.type) {
+        case "started":
+          setExecuting(true)
+          setError(null)
+          break
+        case "succeeded":
+          setResultData({ columns: event.result.columns, rows: event.result.rows })
+          setLastSQL(event.sql)
+          setExecuting(false)
+          addEntry({
+            tableName,
+            database,
+            config: event.config,
+            sql: event.sql,
+            rowCount: event.result.rows.length,
+          })
+          break
+        case "error":
+          setError(event.message)
+          setLastSQL(event.sql)
+          setExecuting(false)
+          break
+        case "aborted":
+          setExecuting(false)
+          break
+      }
+    }
+  }, [store, pivotConfig, tableName, database, queryEngine, setExecuting, setError, setResultData, setLastSQL, addEntry])
+
+  const cancel = useCallback(() => {
+    queryEngine.cancel()
+  }, [queryEngine])
+
   return {
     pivotConfig,
     store,
@@ -84,5 +138,8 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
     addFieldAsFilter,
     addFieldAsIndicator,
     resolveDragDrop,
+    executePivot,
+    isExecuting: store.isExecuting,
+    cancel,
   }
 }
