@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { executeReadOnly, isReadOnlySql, formatSql } from "@/lib/clickhouse"
+import { executeReadOnly, formatSql } from "@/lib/clickhouse"
+import { isReadOnlySql } from "@/lib/sql-guard"
 import { logger } from "@/lib/logger"
 import { fixConcatSql } from "@/lib/sql-utils"
 import { parseLlmConfigFromHeader } from "@/lib/llm-client"

@@ -2,6 +2,7 @@ import { createClient } from "@clickhouse/client"
 import { format } from "sql-formatter"
 export type { TableMeta, ColumnMeta, QueryResult } from "./types"
 import type { TableMeta, ColumnMeta, QueryResult } from "./types"
+import { extractFirstStatement, isReadOnlySql } from "./sql-guard"
 
 export interface ClassifiedError {
   kind: "forbidden" | "sql_error" | "timeout" | "connection" | "unknown"
@@ -27,21 +28,6 @@ function getClient() {
     })
   }
   return client
-}
-
-const READ_ONLY_PREFIXES = ["SELECT", "SHOW", "DESCRIBE", "EXPLAIN", "WITH"]
-
-export function extractFirstStatement(sql: string): string {
-  return sql
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s && !s.startsWith("--"))[0] || sql
-}
-
-export function isReadOnlySql(sql: string): boolean {
-  const singleSql = extractFirstStatement(sql)
-  const trimmed = singleSql.trim().toUpperCase()
-  return READ_ONLY_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
 }
 
 export function formatSql(sql: string): string {
