@@ -1,6 +1,2 @@
-export type ExpressionNode =
-  | { type: 'ref'; key: string }
-  | { type: 'field'; name: string }
-  | { type: 'literal'; value: string | number; dataType: string }
-  | { type: 'call'; func: string; args: ExpressionNode[] }
-  | { type: 'agg'; func: string; field: string }
+// Re-export barrel — type lives in calculated-indicator-expression.ts
+export type { ExpressionNode } from "./calculated-indicator-expression"

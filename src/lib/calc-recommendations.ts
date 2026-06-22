@@ -1,5 +1,5 @@
 import type { PivotIndicator, CalculatedIndicator, IndicatorFormat } from "./pivot-sql"
-import type { ExpressionNode } from "./ast-types"
+import type { ExpressionNode } from "./calculated-indicator-expression"
 
 export interface CalcRecommendation {
   key: string
