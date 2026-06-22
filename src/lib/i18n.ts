@@ -288,6 +288,12 @@ const dict: Record<string, { zh: string; en: string }> = {
   "dashboard.view_not_published": { zh: "该仪表盘尚未发布", en: "This dashboard is not published yet" },
   "dashboard.view_back": { zh: "返回", en: "Go Back" },
   "dashboard.view_open": { zh: "新窗口打开", en: "Open in New Tab" },
+  // Dashboard list sidebar
+  "dashboard.list.title": { zh: "仪表盘", en: "Dashboards" },
+  "dashboard.list.new": { zh: "新建", en: "New" },
+  "dashboard.list.empty": { zh: "暂无仪表盘", en: "No dashboards" },
+  "dashboard.list.defaultName": { zh: "未命名仪表盘", en: "Untitled Dashboard" },
+  "dashboard.list.confirm_delete": { zh: "确定删除该仪表盘？此操作不可撤销。", en: "Delete this dashboard? This cannot be undone." },
   // Chart config editor tabs & fields
   "chart_tab_basic": { zh: "基础", en: "Basic" },
   "chart_tab_axis": { zh: "坐标轴", en: "Axis" },
