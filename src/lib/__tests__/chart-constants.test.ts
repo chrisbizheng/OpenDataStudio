@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { CHART_TYPE_OPTIONS } from "@/lib/chart-constants"
+import { CHART_TYPE_OPTIONS } from "@/lib/chart-helpers"
 
 describe("CHART_TYPE_OPTIONS", () => {
   it("has 9 chart types", () => {

@@ -5,9 +5,10 @@ import CodeMirror from "@uiw/react-codemirror"
 import { sql } from "@codemirror/lang-sql"
 import { useLang } from "@/components/lang-provider"
 import { useIsDark } from "@/hooks/use-is-dark"
-import { useDashboardsStore } from "@/stores/dashboards"
-import { widgetCache, type CachedQueryResult } from "@/lib/widget-cache"
+import { useVizConfig } from "@/hooks/use-viz-config"
+import { createWidget } from "@/lib/widget-creation-lifecycle"
 import { executeWidgetQuery } from "@/lib/widget-execution"
+import { type CachedQueryResult } from "@/lib/widget-cache"
 import { vscodeDark, vscodeLight } from "@/lib/vscode-theme-override"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import type { ChartConfig } from "@/lib/chart-types"
 import type { SeriesConfig } from "@/lib/chart-types"
-import { CHART_TYPE_OPTIONS } from "@/lib/chart-constants"
+import { CHART_TYPE_OPTIONS } from "@/lib/chart-helpers"
 
 interface CreateWidgetSqlDialogProps {
   open: boolean
@@ -52,14 +53,20 @@ export function CreateWidgetSqlDialog({
   dashboardId,
 }: CreateWidgetSqlDialogProps) {
   const { _t } = useLang()
-  const addWidget = useDashboardsStore((s) => s.addWidget)
 
   const [sqlText, setSqlText] = useState("")
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [queryResult, setQueryResult] = useState<CachedQueryResult | null>(null)
 
-  const [vizConfig, setVizConfig] = useState<ChartConfig>({ type: "bar", xKey: "", title: "" })
+  const {
+    config: vizConfig,
+    setConfig: setVizConfig,
+    updateField: updateVizField,
+    addSeries,
+    removeSeries,
+    updateSeriesField,
+  } = useVizConfig({ type: "bar", xKey: "", title: "" })
 
   const isDark = useIsDark()
 
@@ -85,29 +92,24 @@ export function CreateWidgetSqlDialog({
     } finally {
       setRunning(false)
     }
-  }, [sqlText])
+  }, [sqlText, setVizConfig])
 
   const handleAddWidget = useCallback(async () => {
     if (!queryResult) return
 
-    const widgetId = crypto.randomUUID()
-    await widgetCache.set(widgetId, queryResult)
-
-    addWidget(dashboardId, {
-      id: widgetId,
-      type: "chart",
+    await createWidget({
+      source: "sql-dialog",
       sql: sqlText,
       vizConfig,
-      source: "agent-chat",
-      lastRunAt: Date.now(),
-      baseSql: sqlText,
+      dashboardId,
+      queryResult,
     })
 
     setSqlText("")
     setQueryResult(null)
     setError(null)
     onOpenChange(false)
-  }, [queryResult, sqlText, vizConfig, dashboardId, addWidget, onOpenChange])
+  }, [queryResult, sqlText, vizConfig, dashboardId, onOpenChange])
 
   const handleClose = useCallback(() => {
     setSqlText("")
@@ -115,35 +117,7 @@ export function CreateWidgetSqlDialog({
     setError(null)
     setVizConfig({ type: "bar", xKey: "", title: "" })
     onOpenChange(false)
-  }, [onOpenChange])
-
-  const updateVizField = useCallback(<K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) => {
-    setVizConfig((prev) => ({ ...prev, [key]: value }))
-  }, [])
-
-  const addSeries = useCallback(() => {
-    setVizConfig((prev) => ({
-      ...prev,
-      series: [...(prev.series ?? []), { yKey: "" }],
-    }))
-  }, [])
-
-  const removeSeries = useCallback((index: number) => {
-    setVizConfig((prev) => ({
-      ...prev,
-      series: prev.series?.filter((_, i) => i !== index),
-    }))
-  }, [])
-
-  const updateSeriesField = useCallback((index: number, field: keyof SeriesConfig, value: string) => {
-    setVizConfig((prev) => {
-      const series = [...(prev.series ?? [])]
-      if (series[index]) {
-        series[index] = { ...series[index], [field]: value }
-      }
-      return { ...prev, series }
-    })
-  }, [])
+  }, [onOpenChange, setVizConfig])
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
