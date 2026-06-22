@@ -1,5 +1,4 @@
 import type {
-  AssistantMessage,
   ChatContext,
   LlmConfig,
   Message,
@@ -10,8 +9,8 @@ import type {
 } from "./agent-types"
 import type { VisualizationConfig } from "./chart-types"
 import { buildLlmHeaders } from "./llm-client"
-import { getTraceId } from "./client-logger"
 import { extractField } from "./llm-response"
+import { parseSSEStream } from "./sse-frame-parser"
 
 export interface ChatSessionDeps {
   fetchSSE: (url: string, init: RequestInit) => Promise<ReadableStream<Uint8Array>>
@@ -25,31 +24,16 @@ export type ChatEvent =
   | { type: "done"; message: string; sql: string | null; rows: unknown[][]; columns: string[]; visualization: VisualizationConfig | null; reasoning?: string; error?: string }
   | { type: "error"; message: string }
 
-async function* parseSSEStream(
+async function* parseCustomSSEFrames(
   reader: ReadableStreamDefaultReader<Uint8Array>
 ): AsyncGenerator<SSEFrame> {
-  const decoder = new TextDecoder()
-  let buffer = ""
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split("\n")
-    buffer = lines.pop() || ""
-
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue
-      const data = line.slice(6).trim()
-      if (data === "[DONE]") continue
-      try {
-        const parsed = JSON.parse(data) as SSEFrame
-        if (parsed.t === "token" || parsed.t === "done" || parsed.t === "error") {
-          yield parsed
-        }
-      } catch {
+  for await (const payload of parseSSEStream(reader)) {
+    try {
+      const parsed = JSON.parse(payload) as SSEFrame
+      if (parsed.t === "token" || parsed.t === "done" || parsed.t === "error") {
+        yield parsed
       }
+    } catch {
     }
   }
 }
@@ -107,7 +91,7 @@ export async function* runChatSession(
   let rawJson = ""
 
   try {
-    for await (const frame of parseSSEStream(reader)) {
+    for await (const frame of parseCustomSSEFrames(reader)) {
       if (frame.t === "token") {
         const tokenFrame = frame as SSETokenFrame
         rawJson += tokenFrame.c
