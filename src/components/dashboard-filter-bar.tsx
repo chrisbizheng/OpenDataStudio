@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react"
 import { useLang } from "@/components/lang-provider"
-import { useDashboardsStore, type DashboardFilter } from "@/stores/dashboards"
+import { type DashboardFilter } from "@/stores/dashboards"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { AddFilterButton } from "@/components/add-filter-button"
@@ -13,6 +13,9 @@ interface DashboardFilterBarProps {
   isPublished: boolean
   /** Force visibility even when published (for view mode) */
   forceVisible?: boolean
+  onAddFilter: (dashboardId: string, filter: DashboardFilter) => void
+  onRemoveFilter: (dashboardId: string, filterId: string) => void
+  onClearFilters: (dashboardId: string) => void
 }
 
 export function DashboardFilterBar({
@@ -20,9 +23,11 @@ export function DashboardFilterBar({
   filters,
   isPublished,
   forceVisible = false,
+  onAddFilter,
+  onRemoveFilter,
+  onClearFilters,
 }: DashboardFilterBarProps) {
   const { _t } = useLang()
-  const { addFilter, removeFilter, clearFilters } = useDashboardsStore()
 
   if (isPublished && !forceVisible) return null
 
@@ -38,7 +43,7 @@ export function DashboardFilterBar({
           <span>=</span>
           <span className="font-medium">{f.value}</span>
           <button
-            onClick={() => removeFilter(dashboardId, f.id)}
+            onClick={() => onRemoveFilter(dashboardId, f.id)}
             className="ml-0.5 rounded-full hover:bg-muted-foreground/20 transition-colors"
             aria-label={_t("dashboard.delete")}
           >
@@ -48,14 +53,14 @@ export function DashboardFilterBar({
       ))}
       <AddFilterButton
         dashboardId={dashboardId}
-        onAdd={addFilter}
+        onAdd={onAddFilter}
         _t={_t}
       />
       {filters.length > 0 && (
         <Button
           size="xs"
           variant="ghost"
-          onClick={() => clearFilters(dashboardId)}
+          onClick={() => onClearFilters(dashboardId)}
           className="text-xs text-muted-foreground"
         >
           {_t("dashboard.clear_filters")}
