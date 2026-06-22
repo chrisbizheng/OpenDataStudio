@@ -1,5 +1,34 @@
 type Lang = "zh" | "en"
 
+const CHART_MAPPING_TABLE = `| SQL 结构 | 推荐图表 |
+| GROUP BY 单字段 + 1 指标 | "bar" (xKey=维度, yKey=指标) |
+| GROUP BY 单字段 + 多指标 | "composed" 带 series（见下文） |
+| GROUP BY 单字段 + 1 绝对值 + 1 占比 | "composed" 带 series |
+| GROUP BY 两字段（层级/交叉分组） | "bar" — xKey = 第一个 GROUP BY 字段, yKey = 指标。不要在 SQL 中使用 concat()！每列单独 SELECT。示例: SELECT segment, category, SUM(x) AS total FROM ... GROUP BY segment, category |
+| GROUP BY 时间列 + 多指标 | "composed" 带 series（首选） |
+| GROUP BY 时间列 + 1 指标 | "line" 或 "area" |
+| GROUP BY 分类列 + 看分布结构 | "bar" — 柱状图 xKey=类别, yKey=指标, 展示各类别排名/对比 |
+| 单维度排名/比较 | "bar" |
+| 时间序列趋势 | "line" 或 "area" |
+| 占比/百分比/比例/分布（≤10 份）| "pie" — 当用户询问百分比、比例、比率、分布、份额、构成时始终使用 pie |
+| 双指标相关性 | "scatter" |
+| 用户明确要求层级/树状展示 | "treemap" |`
+
+const COMPOSED_CHART_EXAMPLE = `{
+  "type": "composed",
+  "config": {
+    "xKey": "month",
+    "series": [
+      { "yKey": "sales", "chartType": "bar", "label": "Sales" },
+      { "yKey": "target", "chartType": "line", "label": "Target" }
+    ],
+    "title": "Sales vs Target",
+    "showLegend": true
+  }
+}`
+
+const PIE_TRIGGER_WORDS = `百分比, 占比, 比例, 分布, 份额, 构成, 占多少, 多少比例, percentage, proportion, ratio, distribution, share, composition, breakdown`
+
 export function buildChatSystemPrompt(
   lang: Lang,
   params: {
@@ -34,35 +63,12 @@ Schema: ${schemaStr}
 重要——根据 SQL 结构遵循以下映射:
 
 
-| SQL 结构 | 推荐图表 |
-| GROUP BY 单字段 + 1 指标 | "bar" (xKey=维度, yKey=指标) |
-| GROUP BY 单字段 + 多指标 | "composed" 带 series（见下文） |
-| GROUP BY 单字段 + 1 绝对值 + 1 占比 | "composed" 带 series |
-| GROUP BY 两字段（层级/交叉分组） | "bar" — xKey = 第一个 GROUP BY 字段, yKey = 指标。不要在 SQL 中使用 concat()！每列单独 SELECT。示例: SELECT segment, category, SUM(x) AS total FROM ... GROUP BY segment, category |
-| GROUP BY 时间列 + 多指标 | "composed" 带 series（首选） |
-| GROUP BY 时间列 + 1 指标 | "line" 或 "area" |
-| GROUP BY 分类列 + 看分布结构 | "bar" — 柱状图 xKey=类别, yKey=指标, 展示各类别排名/对比 |
-| 单维度排名/比较 | "bar" |
-| 时间序列趋势 | "line" 或 "area" |
-| 占比/百分比/比例/分布（≤10 份）| "pie" — 当用户询问百分比、比例、比率、分布、份额、构成时始终使用 pie |
-| 双指标相关性 | "scatter" |
-| 用户明确要求层级/树状展示 | "treemap" |
+${CHART_MAPPING_TABLE}
 
-饼图触发词——当用户问题包含以下任一词语时使用 "pie": 百分比, 占比, 比例, 分布, 份额, 构成, 占多少, 多少比例, percentage, proportion, ratio, distribution, share, composition, breakdown。当用户问"X占Y的多少"或"各X的占比"时也使用 pie。在 SQL 中使用以下方式计算实际百分比: ROUND(SUM(x) * 100.0 / (SELECT SUM(x) FROM ...), 2) AS pct。
+饼图触发词——当用户问题包含以下任一词语时使用 "pie": ${PIE_TRIGGER_WORDS}。当用户问"X占Y的多少"或"各X的占比"时也使用 pie。在 SQL 中使用以下方式计算实际百分比: ROUND(SUM(x) * 100.0 / (SELECT SUM(x) FROM ...), 2) AS pct。
 
 组合图表带 series——当 SQL 有多个指标列时，使用 "series" 字段代替单个 "yKey":
-{
-  "type": "composed",
-  "config": {
-    "xKey": "month",
-    "series": [
-      { "yKey": "sales", "chartType": "bar", "label": "Sales" },
-      { "yKey": "target", "chartType": "line", "label": "Target" }
-    ],
-    "title": "Sales vs Target",
-    "showLegend": true
-  }
-}
+${COMPOSED_CHART_EXAMPLE}
 每个 series 条目可指定 chartType: "bar", "line", "area"（默认: 第一个是 bar，其余是 line）。
 如果只有一个指标，使用简单的 yKey 格式。
 
@@ -98,35 +104,12 @@ Rules:
 IMPORTANT — follow this mapping based on your SQL structure:
 
 
-| SQL 结构 | 推荐图表 |
-| GROUP BY 单字段 + 1 指标 | "bar" (xKey=dim, yKey=metric) |
-| GROUP BY 单字段 + 多指标 | "composed" with series (see below) |
-| GROUP BY 单字段 + 1 绝对值 + 1 占比 | "composed" with series |
-| GROUP BY 两字段（层级/交叉分组） | "bar" — xKey = first GROUP BY field, yKey = metric. DO NOT use concat() in SQL! SELECT each GROUP BY field separately. Example: SELECT segment, category, SUM(x) AS total FROM ... GROUP BY segment, category |
-| GROUP BY 时间列 + 多指标 | "composed" with series（首选） |
-| GROUP BY 时间列 + 1 指标 | "line" or "area" |
-| GROUP BY 分类列 + 看分布结构 | "bar" — bar chart with xKey=category, yKey=metric, show how categories rank/comparison |
-| 单维度排名/比较 | "bar" |
-| 时间序列趋势 | "line" or "area" |
-| 占比/百分比/比例/分布（≤10 份）| "pie" — always use pie when user asks about percentage, proportion, ratio, distribution, share, composition |
-| 双指标相关性 | "scatter" |
-| 用户明确要求层级/树状展示 | "treemap" |
+${CHART_MAPPING_TABLE}
 
-PIE CHART triggers — use "pie" when the user's question contains ANY of these words: 百分比, 占比, 比例, 分布, 份额, 构成, 占多少, 多少比例, percentage, proportion, ratio, distribution, share, composition, breakdown. Also use "pie" when the user asks "X占Y的多少" or "各X的占比". In the SQL, calculate the actual percentage using: ROUND(SUM(x) * 100.0 / (SELECT SUM(x) FROM ...), 2) AS pct.
+PIE CHART triggers — use "pie" when the user's question contains ANY of these words: ${PIE_TRIGGER_WORDS}. Also use "pie" when the user asks "X占Y的多少" or "各X的占比". In the SQL, calculate the actual percentage using: ROUND(SUM(x) * 100.0 / (SELECT SUM(x) FROM ...), 2) AS pct.
 
 COMPOSED CHART with series — when your SQL has multiple metric columns, use the "series" field instead of a single "yKey":
-{
-  "type": "composed",
-  "config": {
-    "xKey": "month",
-    "series": [
-      { "yKey": "sales", "chartType": "bar", "label": "Sales" },
-      { "yKey": "target", "chartType": "line", "label": "Target" }
-    ],
-    "title": "Sales vs Target",
-    "showLegend": true
-  }
-}
+${COMPOSED_CHART_EXAMPLE}
 Each series entry can specify chartType: "bar", "line", "area" (default: first is bar, rest are line).
 If you only have one metric, use the simple yKey format instead.
 
