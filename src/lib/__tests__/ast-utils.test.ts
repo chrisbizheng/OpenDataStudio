@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { toSQL, extractDependencies, validate, cloneNode, astToSummary } from "../expression"
+import { toSQL, extractDependencies, validate, cloneNode, astToSummary } from "../calculated-indicator-expression"
 import type { ExpressionNode } from "../ast-types"
 
 describe("toSQL", () => {

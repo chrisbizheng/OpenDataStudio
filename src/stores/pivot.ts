@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { type PivotConfig, type PivotIndicator, type CalculatedIndicator, type FilterRule, type SortRule, type TotalsConfig } from "@/lib/pivot-sql"
-import { validate } from "@/lib/expression"
+import { validate } from "@/lib/calculated-indicator-expression"
 import { migratePivotPersisted } from "./migrate-pivot-store"
 
 export interface PivotResult {

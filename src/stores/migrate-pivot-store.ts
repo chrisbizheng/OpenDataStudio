@@ -1,5 +1,5 @@
 import type { PivotIndicator, CalculatedIndicator, SortRule } from "@/lib/pivot-sql"
-import { migrateExpressionToAST } from "@/lib/expression"
+import { migrateExpressionToAST } from "@/lib/calculated-indicator-expression"
 
 const AGG_SUFFIXES: Record<string, string> = {
   _distinct_count: "DISTINCT_COUNT",

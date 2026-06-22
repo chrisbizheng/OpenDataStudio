@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { migrateExpressionToAST, toSQL, extractDependencies } from "../expression"
+import { migrateExpressionToAST, toSQL, extractDependencies } from "../calculated-indicator-expression"
 
 describe("migrateExpressionToAST", () => {
   const indicatorKeyMap: Record<string, string> = {

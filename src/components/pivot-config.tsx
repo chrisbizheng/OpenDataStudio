@@ -2,12 +2,12 @@
 
 import { useState, useMemo, useCallback, type ReactNode } from "react"
 import { useDroppable } from "@dnd-kit/core"
-import { usePivotStore, validatePivotExecution } from "@/stores/pivot"
+import { usePivotStore } from "@/stores/pivot"
 import { usePivotHistoryStore } from "@/stores/pivot-history"
 import { useDatasetStore } from "@/stores/dataset"
 import { useLang } from "@/components/lang-provider"
 import { formatType, isDimensionType } from "@/lib/column-type-classifier"
-import { astToSummary } from "@/lib/expression"
+import { astToSummary } from "@/lib/calculated-indicator-expression"
 import { CalculatedIndicatorDialog } from "./calculated-indicator-dialog"
 import { IndicatorFormatDialog } from "./indicator-format-dialog"
 import { PivotFilterChip } from "./pivot-filter-chip"
@@ -16,9 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toPivotHistoryItem } from "@/lib/history-items"
 import { buildPivotIndicatorTitle } from "@/lib/pivot-client-utils"
-import { runPivotExecution } from "@/lib/pivot-execution"
 import { usePivotOrchestrator } from "@/hooks/use-pivot-orchestrator"
-import { useData } from "@/components/data-provider"
 import type { ColumnMeta } from "@/lib/types"
 import type { PivotIndicator, CalculatedIndicator, FilterRule } from "@/lib/pivot-sql"
 
@@ -59,7 +57,6 @@ export function PivotConfigPanel({
   onViewSql,
 }: PivotConfigPanelProps) {
   const { _t, lang } = useLang()
-  const { queryEngine } = useData()
   const [showCalcDialog, setShowCalcDialog] = useState(false)
   const [editingCalc, setEditingCalc] = useState<CalculatedIndicator | undefined>()
   const [formatIndicatorKey, setFormatIndicatorKey] = useState<string | undefined>()
@@ -72,7 +69,6 @@ export function PivotConfigPanel({
     indicators,
     calculatedIndicators,
     filters,
-    isExecuting,
     removeRow,
     removeColumn,
     removeIndicator,
@@ -80,20 +76,16 @@ export function PivotConfigPanel({
     updateFilter,
     removeFilter,
     removeCalculatedIndicator,
-    setExecuting,
-    setError,
-    setResultData,
-    setLastSQL,
     updateCalculatedIndicator,
     addCalculatedIndicator,
     loadConfig,
   } = usePivotStore()
 
-  const { entries: historyEntries, addEntry, clear: clearHistory } = usePivotHistoryStore()
+  const { entries: historyEntries, clear: clearHistory } = usePivotHistoryStore()
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
   const dbEntries = historyEntries.filter((e) => e.database === selectedDatabase)
 
-  const { pivotConfig, store, getResolvedRole, addFieldAsFilter, addFieldAsIndicator, addRow, addColumn } = usePivotOrchestrator(schema, tableName, database)
+  const { getResolvedRole, addFieldAsFilter, addFieldAsIndicator, addRow, addColumn, executePivot, isExecuting, cancel } = usePivotOrchestrator(schema, tableName, database)
 
   const dimensionCandidates = useMemo(
     () => schema.filter((c) => isDimensionType(c.type)),
@@ -124,45 +116,9 @@ export function PivotConfigPanel({
   )
 
   const handleExecute = useCallback(async () => {
-    const validationError = validatePivotExecution(store, tableName, database)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    for await (const event of runPivotExecution(
-      { config: pivotConfig, tableName, database },
-      { executeSql: (sql, db) => queryEngine.execute(sql, db) }
-    )) {
-      switch (event.type) {
-        case "started":
-          setExecuting(true)
-          setError(null)
-          break
-        case "succeeded":
-          setResultData({ columns: event.result.columns, rows: event.result.rows })
-          setLastSQL(event.sql)
-          setExecuting(false)
-          addEntry({
-            tableName,
-            database,
-            config: event.config,
-            sql: event.sql,
-            rowCount: event.result.rows.length,
-          })
-          onExecute()
-          break
-        case "error":
-          setError(event.message)
-          setLastSQL(event.sql)
-          setExecuting(false)
-          break
-        case "aborted":
-          setExecuting(false)
-          break
-      }
-    }
-  }, [store, pivotConfig, tableName, database, addEntry, onExecute, queryEngine, setExecuting, setError, setResultData, setLastSQL])
+    await executePivot()
+    onExecute()
+  }, [executePivot, onExecute])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -173,7 +129,7 @@ export function PivotConfigPanel({
             variant="destructive"
             size="sm"
             className="h-6 text-xs px-2"
-            onClick={() => queryEngine.cancel()}
+            onClick={cancel}
             title={_t("sql.stop_hint") || "Cancel running query"}
           >
             <span className="inline-block w-2.5 h-2.5 bg-current rounded-sm mr-1" />

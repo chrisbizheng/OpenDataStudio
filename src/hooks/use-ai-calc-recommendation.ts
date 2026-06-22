@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import { useLlmStore } from "@/stores/llm-config"
 import { buildLlmHeaders } from "@/lib/llm-client"
-import { validate } from "@/lib/expression"
+import { validate } from "@/lib/calculated-indicator-expression"
 import type { PivotIndicator } from "@/lib/pivot-sql"
 import type { ColumnMeta } from "@/lib/types"
 import type { CalcRecommendation } from "@/lib/calc-recommendations"

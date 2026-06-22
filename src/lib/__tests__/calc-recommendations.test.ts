@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { getLocalRecommendations } from "../calc-recommendations"
-import { toSQL } from "../expression"
+import { toSQL } from "../calculated-indicator-expression"
 import type { PivotIndicator, CalculatedIndicator } from "../pivot-sql"
 
 const makeIndicator = (key: string, field: string, aggregation: PivotIndicator["aggregation"] = "SUM"): PivotIndicator => ({
