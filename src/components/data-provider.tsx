@@ -4,7 +4,6 @@ import { createContext, useContext, useMemo, type ReactNode } from "react"
 import { CatalogImpl, type Catalog } from "@/lib/catalog"
 import { HttpCatalogPort } from "@/lib/catalog-port-http"
 import { QueryEngineImpl, type QueryEngine } from "@/lib/query-engine"
-import { HttpQueryPort } from "@/lib/query-port-http"
 import { QueryLifecycle } from "@/lib/query-lifecycle"
 
 interface DataContextValue {
@@ -18,9 +17,9 @@ const DataContext = createContext<DataContextValue | null>(null)
 export function DataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<DataContextValue>(() => {
     const catalog = new CatalogImpl(new HttpCatalogPort())
-    const queryEngine = new QueryEngineImpl(new HttpQueryPort())
+    const queryEngine = new QueryEngineImpl()
     const queryLifecycle = new QueryLifecycle({
-      executeSql: (sql, database, signal) => queryEngine.execute(sql, database ?? undefined),
+      executeSql: (sql, database, signal) => queryEngine.execute(sql, database, signal),
     })
     return { catalog, queryEngine, queryLifecycle }
   }, [])

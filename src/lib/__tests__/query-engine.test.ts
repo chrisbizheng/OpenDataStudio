@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { QueryEngineImpl } from "../query-engine"
-import type { QueryPort } from "../query-engine"
 import type { QueryResult } from "../types"
 
 const mockResult: QueryResult = {
@@ -9,87 +8,58 @@ const mockResult: QueryResult = {
   stats: { elapsed: 0.1, rowsRead: 2, bytesRead: 100 },
 }
 
-function createMockPort(overrides?: Partial<QueryPort>): QueryPort {
-  return {
-    execute: vi.fn().mockResolvedValue(mockResult),
-    ...overrides,
-  }
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+function mockFetchSuccess() {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: () => Promise.resolve(mockResult),
+  }) as unknown as typeof fetch
 }
 
 describe("QueryEngineImpl", () => {
   it("执行查询并返回结果", async () => {
-    const port = createMockPort()
-    const engine = new QueryEngineImpl(port)
+    mockFetchSuccess()
+    const engine = new QueryEngineImpl()
 
     const result = await engine.execute("SELECT 1")
     expect(result).toEqual(mockResult)
-    expect(port.execute).toHaveBeenCalledWith("SELECT 1", undefined, expect.any(AbortSignal))
+    expect(global.fetch).toHaveBeenCalledWith("/api/query", expect.objectContaining({ method: "POST" }))
   })
 
-  it("执行查询时传递 database 参数", async () => {
-    const port = createMockPort()
-    const engine = new QueryEngineImpl(port)
+  it("传递 database 和 signal 给 fetch", async () => {
+    mockFetchSuccess()
+    const engine = new QueryEngineImpl()
+    const controller = new AbortController()
 
-    await engine.execute("SELECT 1", "mydb")
-    expect(port.execute).toHaveBeenCalledWith("SELECT 1", "mydb", expect.any(AbortSignal))
+    await engine.execute("SELECT 1", "mydb", controller.signal)
+    expect(global.fetch).toHaveBeenCalledWith("/api/query", expect.objectContaining({
+      body: JSON.stringify({ sql: "SELECT 1", database: "mydb" }),
+      signal: controller.signal,
+    }))
   })
 
-  it("新查询自动取消前一次请求", async () => {
-    let callCount = 0
-    const port = createMockPort({
-      execute: vi.fn().mockImplementation((_sql, _db, signal) => {
-        callCount++
-        return new Promise<QueryResult>((resolve, reject) => {
-          const onAbort = () => {
-            reject(new DOMException("The operation was aborted", "AbortError"))
-          }
-          if (signal?.aborted) {
-            onAbort()
-            return
-          }
-          signal?.addEventListener("abort", onAbort, { once: true })
-          if (callCount === 1) return
-          resolve(mockResult)
-        })
-      }),
-    })
-    const engine = new QueryEngineImpl(port)
+  it("AbortError 返回 null", async () => {
+    global.fetch = vi.fn().mockImplementation(() => {
+      throw new DOMException("aborted", "AbortError")
+    }) as unknown as typeof fetch
+    const engine = new QueryEngineImpl()
 
-    const firstCall = engine.execute("SELECT 1")
-    const secondCall = engine.execute("SELECT 2")
-
-    const firstResult = await firstCall.catch(() => null)
-    const secondResult = await secondCall
-
-    expect(firstResult).toBeNull()
-    expect(secondResult).toEqual(mockResult)
-  })
-
-  it("cancel 取消当前请求", async () => {
-    const port = createMockPort({
-      execute: vi.fn().mockImplementation((_sql, _db, signal) => {
-        return new Promise((_resolve, reject) => {
-          signal?.addEventListener("abort", () => {
-            reject(new DOMException("The operation was aborted", "AbortError"))
-          })
-        })
-      }),
-    })
-    const engine = new QueryEngineImpl(port)
-
-    const promise = engine.execute("SELECT 1")
-    engine.cancel()
-
-    const result = await promise
+    const result = await engine.execute("SELECT 1")
     expect(result).toBeNull()
   })
 
   it("非中止错误正常抛出", async () => {
-    const port = createMockPort({
-      execute: vi.fn().mockRejectedValue(new Error("Server error")),
-    })
-    const engine = new QueryEngineImpl(port)
+    global.fetch = vi.fn().mockRejectedValue(new Error("Server error")) as unknown as typeof fetch
+    const engine = new QueryEngineImpl()
 
     await expect(engine.execute("SELECT 1")).rejects.toThrow("Server error")
+  })
+
+  it("cancel 是 no-op（signal 由调用方持有）", () => {
+    const engine = new QueryEngineImpl()
+    expect(() => engine.cancel()).not.toThrow()
   })
 })
