@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isReadOnlySql } from "../clickhouse"
+import { isReadOnlySql } from "../sql-guard"
 
 describe("isReadOnlySql", () => {
   it("允许 SELECT 语句", () => {
