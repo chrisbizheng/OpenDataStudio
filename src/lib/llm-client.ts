@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server"
 import type { LlmConfig } from "./agent-types"
+import { parseSSEStream } from "./sse-frame-parser"
 
 const OPENAI_URL = "https://api.openai.com/v1"
 
@@ -73,4 +74,56 @@ export async function callLlm(
 
   const data = await res.json()
   return (data.choices?.[0]?.message?.content as string) ?? ""
+}
+
+// ============================================================================
+// LLM streaming (OpenAI-compatible SSE consumer)
+// ============================================================================
+
+export async function* streamLLM(
+  apiUrl: string,
+  headers: Record<string, string>,
+  payload: Record<string, unknown>
+): AsyncGenerator<string> {
+  const res = await fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...payload, stream: true }),
+    signal: AbortSignal.timeout(55000),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "")
+    throw new Error(`LLM API error (${res.status}): ${errText.slice(0, 200)}`)
+  }
+
+  const reader = res.body!.getReader()
+  let yielded = false
+  let lastPayload = ""
+
+  for await (const ssePayload of parseSSEStream(reader)) {
+    lastPayload = ssePayload
+    try {
+      const parsed = JSON.parse(ssePayload)
+      const content = parsed.choices?.[0]?.delta?.content || ""
+      if (content) {
+        yielded = true
+        yield content
+      }
+    } catch {
+    }
+  }
+
+  if (!yielded && lastPayload.length > 0) {
+    try {
+      const parsed = JSON.parse(lastPayload)
+      const content =
+        parsed.choices?.[0]?.message?.content ||
+        parsed.choices?.[0]?.delta?.content ||
+        ""
+      if (content) yield content
+    } catch {
+      yield lastPayload
+    }
+  }
 }
