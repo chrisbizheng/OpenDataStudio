@@ -1,6 +1,7 @@
 import type { ColumnMeta, QueryResult } from "./types"
 import { escapeField } from "./sql-utils"
 import { unwrapNullable } from "./column-type-classifier"
+import { matchRow } from "./row-filter-sort"
 
 export interface TableData {
   columns: string[]
@@ -70,11 +71,6 @@ function buildSortedSql(
   return `SELECT * FROM ${qualified} ORDER BY ${escapeField(column)} ${direction} LIMIT ${limit}${offset > 0 ? ` OFFSET ${offset}` : ""}`
 }
 
-function matchRow(row: unknown[], query: string): boolean {
-  const q = query.toLowerCase()
-  return row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
-}
-
 export interface QueryLifecycleDeps {
   executeSql: (sql: string, database?: string, signal?: AbortSignal) => Promise<QueryResult | null>
 }
@@ -91,6 +87,10 @@ export class QueryLifecycle {
     query: "",
     result: null,
   }
+  /** 结构化存储当前数据库名，避免从 currentTable 字符串 split */
+  private currentDb = ""
+  /** 结构化存储当前表名（不含数据库前缀），避免从 currentTable 字符串 split */
+  private currentTableName = ""
 
   constructor(deps: QueryLifecycleDeps) {
     this.deps = deps
@@ -142,12 +142,21 @@ export class QueryLifecycle {
     this.setState({ sort })
   }
 
+  private parseTable(tableName: string): { db: string; table: string } {
+    const dot = tableName.indexOf(".")
+    if (dot === -1) return { db: this.currentDb, table: tableName }
+    return { db: tableName.slice(0, dot), table: tableName.slice(dot + 1) }
+  }
+
   async execute(sql: string, tableName: string, append = false): Promise<void> {
     this.cancel()
     const controller = new AbortController()
     this.controller = controller
 
     if (!append) {
+      const { db, table } = this.parseTable(tableName)
+      this.currentDb = db
+      this.currentTableName = table
       this.setState({
         status: "executing",
         currentTable: tableName,
@@ -202,6 +211,8 @@ export class QueryLifecycle {
   }
 
   async executeDefaultTable(database: string, table: string, schema: ColumnMeta[]): Promise<void> {
+    this.currentDb = database
+    this.currentTableName = table
     this.setState({ currentSchema: schema })
     const stableOrder = inferStableOrder(schema)
     const sql = buildTableSql(database, table, stableOrder)
@@ -221,6 +232,8 @@ export class QueryLifecycle {
       newDir = "asc"
     }
 
+    this.currentDb = database
+    this.currentTableName = table
     this.setState({ sort: { column, direction: newDir } })
 
     if (newDir) {
@@ -254,8 +267,8 @@ export class QueryLifecycle {
   async loadMore(): Promise<void> {
     const { currentTable, currentSchema, sort, loadedRows } = this._state
     if (!currentTable) return
-    const db = currentTable.split(".")[0] || ""
-    const table = currentTable.split(".")[1] || currentTable
+    const db = this.currentDb
+    const table = this.currentTableName
     const offset = loadedRows
     let sql: string
     if (sort.column && sort.direction) {

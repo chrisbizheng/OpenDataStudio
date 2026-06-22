@@ -61,8 +61,11 @@ export function useQueryOrchestrator() {
     if (selectedTable && selectedDatabase) {
       queryLifecycle.executeDefaultTable(selectedDatabase, selectedTable, schema)
     }
+  }, [selectedTable, selectedDatabase, queryLifecycle, schema])
+
+  useEffect(() => {
     resetPivot()
-  }, [selectedTable, selectedDatabase, queryLifecycle, resetPivot, schema])
+  }, [selectedTable, selectedDatabase, resetPivot])
 
   const handleSort = useCallback(
     (column: string) => {
