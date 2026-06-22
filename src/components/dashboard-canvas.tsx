@@ -1,38 +1,25 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
-import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout"
+import { useCallback, useState } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { cn } from "@/lib/utils"
-import { useTheme } from "@/components/theme-provider"
+import { LayoutDashboard, PlusCircle } from "lucide-react"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { useDatasetStore } from "@/stores/dataset"
-import { DashboardFilterBar } from "@/components/dashboard-filter-bar"
-import { LayoutDashboard, BarChart3, Plus, PlusCircle } from "lucide-react"
 import { WidgetConfigEditor } from "@/components/widget-config-editor"
 import { useData } from "@/components/data-provider"
-import { DashboardList } from "@/components/dashboard-list"
 import { useLang } from "@/components/lang-provider"
 import { useUiStore } from "@/stores/ui"
 import { Button } from "@/components/ui/button"
-import type { ChartWidget } from "@/stores/dashboards"
+import type { ChartWidget, WidgetLayout } from "@/stores/dashboards"
 import { CreateWidgetSqlDialog } from "@/components/create-widget-sql-dialog"
 import { CreateWidgetAiDialog } from "@/components/create-widget-ai-dialog"
-import { ChartWidgetRenderer } from "@/components/chart-widget-renderer"
-import { toRGLLayout, fromRGLLayout, DASHBOARD_GRID_CONFIG, DASHBOARD_GRID_CSS } from "@/lib/dashboard-utils"
-import { DashboardToolbar } from "@/components/dashboard-toolbar"
-
-import "react-grid-layout/css/styles.css"
-import "react-resizable/css/styles.css"
+import { DashboardLayout } from "@/components/dashboard-layout"
+import { DashboardList } from "@/components/dashboard-list"
 
 export function DashboardCanvas() {
-  const { resolved: themeMode } = useTheme()
-  const isDark = themeMode === "dark"
-
   const { _t } = useLang()
-  const { width, containerRef } = useContainerWidth()
 
-  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, dashboards, createDashboard, isDirty: storeIsDirty } =
+  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, clearFilters, dashboards, createDashboard, isDirty: storeIsDirty } =
     useDashboardsStore(
       useShallow((s) => ({
         activeDashboard: s.dashboards.find((d) => d.id === s.activeDashboardId) ?? null,
@@ -44,6 +31,7 @@ export function DashboardCanvas() {
         updateWidget: s.updateWidget,
         addFilter: s.addFilter,
         removeFilter: s.removeFilter,
+        clearFilters: s.clearFilters,
         dashboards: s.dashboards,
         createDashboard: s.createDashboard,
         isDirty: s.isDirty,
@@ -57,20 +45,6 @@ export function DashboardCanvas() {
 
   const hasDashboards = dashboards.length > 0
 
-  const handleLayoutChange = useCallback(
-    (layout: Layout) => {
-      if (!activeDashboardId) return
-      updateLayout(activeDashboardId, fromRGLLayout(layout))
-    },
-    [activeDashboardId, updateLayout]
-  )
-
-  const layout = useMemo(
-    () => (activeDashboard ? toRGLLayout(activeDashboard.layout) : []),
-    [activeDashboard]
-  )
-
-  const isPublished = activeDashboard?.status === "published"
   const isDirty = activeDashboardId ? storeIsDirty(activeDashboardId) : false
 
   const handleSave = useCallback(() => {
@@ -106,7 +80,14 @@ export function DashboardCanvas() {
     queryLifecycle.setSql(widget.sql)
     queryLifecycle.setPendingAutoExecute(widget.sql)
     useUiStore.getState().setPivotView("grid")
-  }, [])
+  }, [queryLifecycle])
+
+  const handleLayoutChange = useCallback(
+    (dashboardId: string, layout: WidgetLayout[]) => {
+      updateLayout(dashboardId, layout)
+    },
+    [updateLayout]
+  )
 
   if (!activeDashboard) {
     return (
@@ -129,125 +110,52 @@ export function DashboardCanvas() {
     )
   }
 
-  if (activeDashboard.widgets.length === 0) {
-    return (
-      <div className="flex-1 flex min-h-0">
-        <div className="w-48 shrink-0 border-r border-border overflow-auto">
-          <DashboardList />
-        </div>
-        <div ref={containerRef} className="flex-1 flex flex-col min-h-0">
-          <DashboardToolbar
-            name={activeDashboard.name}
-            isPublished={!!isPublished}
-            isDirty={isDirty}
-            dashboardId={activeDashboard.id}
-            onSave={handleSave}
-            onPublish={handlePublish}
-            onEditDraft={handleEditDraft}
-            onNewSql={() => setShowSqlDialog(true)}
-            onNewAi={() => setShowAiDialog(true)}
-            _t={_t}
-          />
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
-            <BarChart3 className="w-12 h-12 opacity-40" />
-            <span className="text-sm font-medium">{_t("dashboard.no_widgets_title")}</span>
-            <span className="text-xs">{_t("dashboard.no_widgets_hint")}</span>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (<>
-    <div className="flex-1 flex min-h-0">
-      <div className="w-48 shrink-0 border-r border-border overflow-auto">
-        <DashboardList />
-      </div>
-      <div ref={containerRef} className="flex-1 min-h-0 flex flex-col">
-        <DashboardToolbar
-          name={activeDashboard.name}
-          isPublished={!!isPublished}
-          isDirty={isDirty}
-          dashboardId={activeDashboard.id}
-          onSave={handleSave}
-          onPublish={handlePublish}
-          onEditDraft={handleEditDraft}
-          onNewSql={() => setShowSqlDialog(true)}
-          onNewAi={() => setShowAiDialog(true)}
-          _t={_t}
-        />
-        <DashboardFilterBar
-          dashboardId={activeDashboard.id}
-          filters={activeDashboard.filters}
-          isPublished={!!isPublished}
-        />
-        <div className="flex-1 min-h-0 overflow-auto">
-        <style>{DASHBOARD_GRID_CSS}</style>
-      <GridLayout
-        width={width}
-        layout={layout}
-        gridConfig={DASHBOARD_GRID_CONFIG}
-        dragConfig={{ enabled: !isPublished }}
-        resizeConfig={{ enabled: !isPublished }}
+  return (
+    <>
+      <DashboardLayout
+        mode="edit"
+        dashboard={activeDashboard}
+        isDirty={isDirty}
+        onAddFilter={addFilter}
+        onRemoveFilter={removeFilter}
+        onClearFilters={clearFilters}
+        onSave={handleSave}
+        onPublish={handlePublish}
+        onUnpublish={handleEditDraft}
+        onNewSql={() => setShowSqlDialog(true)}
+        onNewAi={() => setShowAiDialog(true)}
+        onEditWidget={setEditingWidget}
+        onEditSql={handleEditSql}
         onLayoutChange={handleLayoutChange}
-      >
-        {activeDashboard.widgets.map((widget) => (
-          <div key={widget.id} className={cn(
-            "rounded-lg border overflow-hidden",
-            isDark ? "bg-card border-border" : "bg-white border-border",
-          )}>
-            {widget.type === "chart" ? (
-              <ChartWidgetRenderer
-                widget={widget}
-                isDark={isDark}
-                isPublished={isPublished}
-                onEditConfig={setEditingWidget}
-                onEditSql={handleEditSql}
-                dashboardFilters={activeDashboard.filters}
-                onAddFilter={addFilter}
-                onRemoveFilter={removeFilter}
-                dashboardId={activeDashboard.id}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                {widget.type} widget (coming soon)
-              </div>
-            )}
-          </div>
-        ))}
-      </GridLayout>
-      </div>
-      </div>
-    </div>
-    {editingWidget && (
-      <WidgetConfigEditor
-        open={!!editingWidget}
-        onOpenChange={(open) => { if (!open) setEditingWidget(null) }}
-        config={editingWidget.vizConfig}
-        onSave={(newConfig) => {
-          if (!activeDashboardId || !editingWidget) return
-          updateWidget(activeDashboardId, editingWidget.id, { vizConfig: newConfig })
-          setEditingWidget(null)
-        }}
       />
-    )}
-    {activeDashboardId && (
-      <CreateWidgetSqlDialog
-        open={showSqlDialog}
-        onOpenChange={setShowSqlDialog}
-        dashboardId={activeDashboardId}
-      />
-    )}
-    {activeDashboardId && (
-      <CreateWidgetAiDialog
-        open={showAiDialog}
-        onOpenChange={setShowAiDialog}
-        dashboardId={activeDashboardId}
-        tableName={selectedTable}
-        selectedDatabase={selectedDatabase}
-      />
-    )}
+      {editingWidget && (
+        <WidgetConfigEditor
+          open={!!editingWidget}
+          onOpenChange={(open) => { if (!open) setEditingWidget(null) }}
+          config={editingWidget.vizConfig}
+          onSave={(newConfig) => {
+            if (!activeDashboardId || !editingWidget) return
+            updateWidget(activeDashboardId, editingWidget.id, { vizConfig: newConfig })
+            setEditingWidget(null)
+          }}
+        />
+      )}
+      {activeDashboardId && (
+        <CreateWidgetSqlDialog
+          open={showSqlDialog}
+          onOpenChange={setShowSqlDialog}
+          dashboardId={activeDashboardId}
+        />
+      )}
+      {activeDashboardId && (
+        <CreateWidgetAiDialog
+          open={showAiDialog}
+          onOpenChange={setShowAiDialog}
+          dashboardId={activeDashboardId}
+          tableName={selectedTable}
+          selectedDatabase={selectedDatabase}
+        />
+      )}
     </>
   )
 }
-
