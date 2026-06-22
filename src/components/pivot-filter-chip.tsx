@@ -7,6 +7,7 @@ import { useLang } from "@/components/lang-provider"
 import { useData } from "@/components/data-provider"
 import { fetchDistinctValues } from "@/lib/distinct-values"
 import { toggleFilterValue } from "@/lib/pivot-client-utils"
+import { classifyColumnType } from "@/lib/column-type-classifier"
 import type { FilterRule } from "@/lib/pivot-sql"
 import type { FieldRole } from "@/lib/column-type-classifier"
 
@@ -34,7 +35,7 @@ export function PivotFilterChip({
   const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<unknown[]>([])
   const [loading, setLoading] = useState(false)
-  const isRange = role === "indicator" || /^Date/.test(type.replace(/^Nullable\((.+)\)$/, "$1"))
+  const isRange = role === "indicator" || classifyColumnType(type) === "date"
   const isDateRange = isRange && role !== "indicator"
   const values = Array.isArray(filter.value) ? filter.value : [filter.value]
 

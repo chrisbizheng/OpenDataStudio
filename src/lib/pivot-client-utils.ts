@@ -1,5 +1,6 @@
 import type { AggregationType, PivotIndicator } from "./pivot-sql"
 import { isIndicatorType } from "./column-type-classifier"
+import { matchRow } from "./row-filter-sort"
 
 export function toggleFilterValue(values: unknown[], value: unknown): unknown[] {
   return values.includes(value)
@@ -43,11 +44,6 @@ export function buildNextPivotIndicator(
     aggregation,
     comment: comment !== field ? comment : undefined,
   }
-}
-
-function matchRow(row: unknown[], query: string): boolean {
-  const q = query.toLowerCase()
-  return row.some((cell) => String(cell ?? "").toLowerCase().includes(q))
 }
 
 export interface PivotClientData {
