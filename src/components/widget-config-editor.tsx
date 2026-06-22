@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useLang } from "@/components/lang-provider"
 import type { ChartConfig } from "@/lib/chart-types"
-import type { SeriesConfig } from "@/lib/chart-types"
+import { useVizConfig } from "@/hooks/use-viz-config"
 import { NO_AXIS_TYPES, configsEqual, type TabSharedProps } from "./widget-config-editor/config-helpers"
 import { BasicTab } from "./widget-config-editor/basic-tab"
 import { AxisTab } from "./widget-config-editor/axis-tab"
@@ -29,9 +29,20 @@ export function WidgetConfigEditor({
 }: WidgetConfigEditorProps) {
   const { _t } = useLang()
 
-  const [local, setLocal] = useState<ChartConfig>(() => structuredClone(config))
   const [jsonText, setJsonText] = useState<string>(config.jsonOverride ?? "")
   const [jsonError, setJsonError] = useState(false)
+
+  const {
+    config: local,
+    setConfig: setLocal,
+    updateField,
+    updateAxis,
+    updateStyle,
+    updateLabel,
+    addSeries,
+    removeSeries,
+    updateSeriesField,
+  } = useVizConfig(structuredClone(config))
 
   useEffect(() => {
     if (open) {
@@ -42,47 +53,7 @@ export function WidgetConfigEditor({
         setJsonError(false)
       })
     }
-  }, [config, open])
-
-  const updateField = <K extends keyof ChartConfig>(key: K, value: ChartConfig[K]) => {
-    setLocal((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const updateAxis = <K extends keyof NonNullable<ChartConfig["axis"]>>(key: K, value: NonNullable<ChartConfig["axis"]>[K]) => {
-    setLocal((prev) => ({ ...prev, axis: { ...prev.axis, [key]: value } }))
-  }
-
-  const updateStyle = <K extends keyof NonNullable<ChartConfig["style"]>>(key: K, value: NonNullable<ChartConfig["style"]>[K]) => {
-    setLocal((prev) => ({ ...prev, style: { ...prev.style, [key]: value } }))
-  }
-
-  const updateLabel = <K extends keyof NonNullable<ChartConfig["label"]>>(key: K, value: NonNullable<ChartConfig["label"]>[K]) => {
-    setLocal((prev) => ({ ...prev, label: { ...prev.label, [key]: value } }))
-  }
-
-  const addSeries = () => {
-    setLocal((prev) => ({
-      ...prev,
-      series: [...(prev.series ?? []), { yKey: "" }],
-    }))
-  }
-
-  const removeSeries = (index: number) => {
-    setLocal((prev) => ({
-      ...prev,
-      series: prev.series?.filter((_, i) => i !== index),
-    }))
-  }
-
-  const updateSeriesField = (index: number, field: keyof SeriesConfig, value: string) => {
-    setLocal((prev) => {
-      const series = [...(prev.series ?? [])]
-      if (series[index]) {
-        series[index] = { ...series[index], [field]: value }
-      }
-      return { ...prev, series }
-    })
-  }
+  }, [config, open, setLocal])
 
   const handleJsonChange = (text: string) => {
     setJsonText(text)

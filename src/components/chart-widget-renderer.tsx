@@ -1,11 +1,10 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useShallow } from "zustand/react/shallow"
 import { useLang } from "@/components/lang-provider"
 import { Chart } from "@/components/chart"
 import { widgetCache, type CachedQueryResult } from "@/lib/widget-cache"
-import { executeWidgetQuery } from "@/lib/widget-execution"
+import { refreshWidget } from "@/lib/widget-creation-lifecycle"
 import { buildFilteredSql } from "@/lib/widget-filter-sql"
 import { useDashboardsStore, type ChartWidget, type DashboardFilter } from "@/stores/dashboards"
 import { AlertTriangle, RefreshCw, Settings2, FileCode, Trash2 } from "lucide-react"
@@ -55,13 +54,6 @@ export function ChartWidgetRenderer({
 
   const { _t } = useLang()
 
-  const { updateWidgetLastRunAt } =
-    useDashboardsStore(
-      useShallow((s) => ({
-        updateWidgetLastRunAt: s.updateWidgetLastRunAt,
-      }))
-    )
-
   useEffect(() => {
     widgetCache.get(widget.id).then((result) => {
       setCachedResult(result)
@@ -85,16 +77,18 @@ export function ChartWidgetRenderer({
     try {
       const baseSql = widget.baseSql || widget.sql
       const sql = buildFilteredSql(baseSql, dashboardFilters)
-      const result = await executeWidgetQuery(sql)
-      await widgetCache.set(widget.id, result)
+      const result = await refreshWidget({
+        dashboardId,
+        widgetId: widget.id,
+        sql,
+      })
       setCachedResult(result)
-      updateWidgetLastRunAt(dashboardId, widget.id, Date.now())
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setRefreshing(false)
     }
-  }, [widget.id, widget.sql, widget.baseSql, dashboardId, dashboardFilters, updateWidgetLastRunAt])
+  }, [widget.id, widget.sql, widget.baseSql, dashboardId, dashboardFilters])
 
   const prevFilterCountRef = useRef(dashboardFilters.length)
   useEffect(() => {
