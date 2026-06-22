@@ -16,7 +16,7 @@ describe("getIndicatorSQLMap", () => {
       ],
       calculatedIndicators: [],
     }
-    const map = getIndicatorSQLMap(config)
+    const map = getIndicatorSQLMap(config.indicators)
     expect(map["sales_sum"]).toBe("SUM(`sales`)")
     expect(map["count"]).toBe("COUNT(`id`)")
   })
@@ -34,7 +34,7 @@ describe("getIndicatorSQLMap", () => {
       ],
       calculatedIndicators: [],
     }
-    const map = getIndicatorSQLMap(config)
+    const map = getIndicatorSQLMap(config.indicators)
     expect(map["a"]).toBe("SUM(`x`)")
     expect(map["b"]).toBe("AVG(`x`)")
     expect(map["c"]).toBe("MIN(`x`)")
