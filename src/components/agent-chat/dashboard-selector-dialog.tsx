@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useDashboardsStore } from "@/stores/dashboards"
-import { createWidgetFromMessage } from "@/lib/widget-factory"
+import { createWidget } from "@/lib/widget-creation-lifecycle"
 import type { AssistantMessage } from "@/lib/agent-types"
 
 export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: {
@@ -15,7 +15,7 @@ export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: 
   index: number
   _t: (k: string) => string
 }) {
-  const { dashboards, createDashboard, addWidget } = useDashboardsStore()
+  const { dashboards, createDashboard } = useDashboardsStore()
   const [adding, setAdding] = useState<string | null>(null)
   const [showNewInput, setShowNewInput] = useState(false)
   const [newName, setNewName] = useState("")
@@ -23,9 +23,12 @@ export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: 
   const addToDashboard = async (dashboardId: string, dashboardName: string) => {
     setAdding(dashboardId)
     try {
-      const widget = await createWidgetFromMessage(msg, index)
+      const widget = await createWidget({
+        source: "agent-chat",
+        dashboardId,
+        message: { msg, index },
+      })
       if (widget) {
-        addWidget(dashboardId, widget)
         onOpenChange(false)
         toast.success(`${_t("dashboard.added_to")}: ${dashboardName}`)
       } else {

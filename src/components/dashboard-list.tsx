@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Pencil, Trash2, Plus, LayoutDashboard, CheckCircle2 } from "lucide-react";
 
 export function DashboardList() {
-  const { _t, lang } = useLang();
+  const { _t } = useLang();
   const {
     dashboards,
     activeDashboardId,
@@ -22,18 +22,8 @@ export function DashboardList() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  const dict: Record<string, { zh: string; en: string }> = {
-    "dashboard.list.title": { zh: "仪表盘", en: "Dashboards" },
-    "dashboard.list.new": { zh: "新建", en: "New" },
-    "dashboard.list.empty": { zh: "暂无仪表盘", en: "No dashboards" },
-    "dashboard.list.defaultName": { zh: "未命名仪表盘", en: "Untitled Dashboard" },
-    "dashboard.list.confirm_delete": { zh: "确定删除该仪表盘？此操作不可撤销。", en: "Delete this dashboard? This cannot be undone." },
-  };
-
-  const t = (key: string) => dict[key]?.[lang] ?? key;
-
   const handleCreate = () => {
-    const id = createDashboard(t("dashboard.list.defaultName"));
+    const id = createDashboard(_t("dashboard.list.defaultName"));
     setActiveDashboard(id);
   };
 
@@ -64,7 +54,7 @@ export function DashboardList() {
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
           <LayoutDashboard className="h-3.5 w-3.5" />
-          {t("dashboard.list.title")}
+          {_t("dashboard.list.title")}
         </h3>
         <Button
           variant="ghost"
@@ -73,14 +63,14 @@ export function DashboardList() {
           onClick={handleCreate}
         >
           <Plus className="h-3.5 w-3.5 mr-0.5" />
-          {t("dashboard.list.new")}
+          {_t("dashboard.list.new")}
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-1">
         {dashboards.length === 0 ? (
           <div className="text-xs text-muted-foreground text-center py-6">
-            {t("dashboard.list.empty")}
+            {_t("dashboard.list.empty")}
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -131,7 +121,7 @@ export function DashboardList() {
                         className="h-5 w-5 p-0 text-destructive hover:text-destructive"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(t("dashboard.list.confirm_delete"))) {
+                          if (window.confirm(_t("dashboard.list.confirm_delete"))) {
                             deleteDashboard(db.id);
                           }
                         }}
