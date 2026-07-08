@@ -57,16 +57,23 @@ export function ExploreLeftPanel({
   const addMetricToDataset = useDatasetRegistryStore((s) => s.addMetricToDataset)
   const updateDataset = useDatasetRegistryStore((s) => s.updateDataset)
 
-  // Auto-fetch schema for virtual datasets with empty columns
+  // Auto-fetch schema for datasets with empty columns
   const [fetchingSchema, setFetchingSchema] = useState(false)
   const [schemaError, setSchemaError] = useState<string | null>(null)
 
-  const fetchVirtualSchema = useCallback(async () => {
-    if (!dataset || dataset.type !== "virtual" || !dataset.sql || dataset.columns.length > 0) return
+  const fetchSchema = useCallback(async () => {
+    if (!dataset || dataset.columns.length > 0) return
+    const sql =
+      dataset.type === "virtual" && dataset.sql
+        ? `SELECT * FROM (${dataset.sql}) AS __v LIMIT 1`
+        : dataset.type === "physical" && dataset.database && dataset.table
+        ? `SELECT * FROM ${dataset.database}.${dataset.table} LIMIT 1`
+        : null
+    if (!sql) return
     setFetchingSchema(true)
     setSchemaError(null)
     try {
-      const result = await executeWidgetQuery(`SELECT * FROM (${dataset.sql}) AS __v LIMIT 1`)
+      const result = await executeWidgetQuery(sql)
       const cols: DatasetColumn[] = result.columns.map((name) => ({
         name,
         type: "",
@@ -85,11 +92,16 @@ export function ExploreLeftPanel({
   }, [dataset, updateDataset])
 
   useEffect(() => {
-    if (dataset?.type === "virtual" && dataset.sql && dataset.columns.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void fetchVirtualSchema()
+    if (dataset && dataset.columns.length === 0) {
+      const canFetch =
+        (dataset.type === "virtual" && dataset.sql) ||
+        (dataset.type === "physical" && dataset.database && dataset.table)
+      if (canFetch) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void fetchSchema()
+      }
     }
-  }, [dataset?.id, dataset?.type, dataset?.sql, dataset?.columns?.length, fetchVirtualSchema])
+  }, [dataset?.id, dataset?.type, dataset?.sql, dataset?.database, dataset?.table, dataset?.columns?.length, fetchSchema])
 
   // Metric add form state
   const [showMetricForm, setShowMetricForm] = useState(false)
@@ -267,7 +279,7 @@ export function ExploreLeftPanel({
           {columns.length === 0 && schemaError && (
             <div className="space-y-1">
               <div className="text-[10px] text-destructive">{schemaError}</div>
-              <Button size="xs" variant="outline" className="h-5 text-[9px]" onClick={fetchVirtualSchema}>
+              <Button size="xs" variant="outline" className="h-5 text-[9px]" onClick={fetchSchema}>
                 {_t("error.retry")}
               </Button>
             </div>

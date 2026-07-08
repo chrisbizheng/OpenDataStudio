@@ -86,9 +86,8 @@ export function ExploreWidgetEditor({ open, onOpenChange, dashboardId, widgetId 
   const datasets = useDatasetRegistryStore((s) => s.datasets)
   const createDataset = useDatasetRegistryStore((s) => s.createDataset)
 
-  const { selectedTable, selectedDatabase } = useDatasetStore(
-    useCallback((s) => ({ selectedTable: s.selectedTable, selectedDatabase: s.selectedDatabase }), [])
-  )
+  const selectedTable = useDatasetStore((s) => s.selectedTable)
+  const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
 
   // Local editing state — initialize from widget on mount
   const initialWidget = widget && widget.type === "chart" ? (widget as import("@/stores/dashboards").ChartWidget) : null
