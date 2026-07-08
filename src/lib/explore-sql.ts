@@ -81,12 +81,12 @@ function buildFromClause(dataset: {
 }
 
 // ── GROUP BY 表达式 ──
+// GROUP BY uses the SELECT alias (column name), NOT the wrapped expression.
+// Reason: ClickHouse alias shadowing. `SELECT toStartOfDay(date) AS date ... GROUP BY toStartOfDay(date)`
+// resolves the inner `date` to the SELECT alias, causing "not under aggregate function" errors.
+// GROUP BY the alias `date` is valid ClickHouse SQL and avoids the shadowing.
 
 function dimensionGroupByExpr(dim: Dimension): string {
-  if (dim.type === "temporal" && dim.timeGranularity) {
-    const fn = TIME_GRAIN_FN[dim.timeGranularity]
-    return `${fn}(${escapeField(dim.column)})`
-  }
   return escapeField(dim.column)
 }
 

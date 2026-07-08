@@ -40,7 +40,7 @@ describe("buildExploreSQL", () => {
     const dataset: DatasetRef = { id: "ds1", name: "sales", type: "physical", database: "mydb", table: "sales" }
     const sql = buildExploreSQL(config, dataset)
     expect(sql).toContain("toStartOfMonth(`order_date`) AS `order_date`")
-    expect(sql).toContain("GROUP BY toStartOfMonth(`order_date`)")
+    expect(sql).toContain("GROUP BY `order_date`")
   })
 
   it("时间范围 Last 7 days", () => {
@@ -135,7 +135,7 @@ describe("buildExploreSQL", () => {
     expect(sql).toContain("AVG(`price`) AS `m2`")
     expect(sql).toContain("toStartOfMonth(`order_date`) AS `order_date`")
     expect(sql).toContain("`region` AS `region`")
-    expect(sql).toContain("GROUP BY `region`, toStartOfMonth(`order_date`)")
+    expect(sql).toContain("GROUP BY `region`, `order_date`")
   })
 
   it("ORDER BY 默认时间列", () => {
@@ -185,7 +185,7 @@ describe("buildExploreSQL", () => {
     // Inner has SELECT + FROM + WHERE + GROUP BY
     expect(sql).toContain("SUM(`revenue`) AS `m1`")
     expect(sql).toContain("FROM `mydb`.`sales`")
-    expect(sql).toContain("GROUP BY toStartOfDay(`order_date`)")
+    expect(sql).toContain("GROUP BY `order_date`")
     // Outer has rolling window column
     expect(sql).toContain("AVG(`m1`) OVER (ORDER BY `order_date` ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS `m1_rolling_7`")
     // ORDER BY and LIMIT on outer
