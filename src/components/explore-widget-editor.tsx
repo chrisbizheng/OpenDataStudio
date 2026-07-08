@@ -236,7 +236,7 @@ export function ExploreWidgetEditor({ open, onOpenChange, dashboardId, widgetId 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-none w-[95vw] h-[90vh] flex flex-col p-0 gap-0" showCloseButton={false}>
+      <DialogContent className="max-w-none sm:max-w-none w-[95vw] h-[90vh] flex flex-col p-0 gap-0" showCloseButton={false}>
         {/* Header */}
         <DialogHeader className="shrink-0 px-4 py-3 border-b flex flex-row items-center justify-between">
           <DialogTitle className="text-sm">{_t("dashboard.edit_config")}</DialogTitle>
