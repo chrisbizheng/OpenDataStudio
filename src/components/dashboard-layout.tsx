@@ -33,6 +33,7 @@ interface DashboardLayoutProps {
   onNewExplore?: () => void
   onEditWidget?: (widget: ChartWidget) => void
   onEditSql?: (widget: ChartWidget) => void
+  onEditExplore?: (widgetId: string) => void
   onLayoutChange?: (dashboardId: string, layout: WidgetLayout[]) => void
 }
 
@@ -51,6 +52,7 @@ export function DashboardLayout({
   onNewExplore,
   onEditWidget,
   onEditSql,
+  onEditExplore,
   onLayoutChange,
 }: DashboardLayoutProps) {
   const { resolved: themeMode, setTheme, theme } = useTheme()
@@ -220,6 +222,7 @@ export function DashboardLayout({
                 dashboardId={dashboard.id}
                 onEditConfig={isView ? undefined : onEditWidget}
                 onEditSql={isView ? undefined : onEditSql}
+                onEditExplore={isView ? undefined : onEditExplore}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">

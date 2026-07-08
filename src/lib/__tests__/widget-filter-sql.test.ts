@@ -102,7 +102,7 @@ describe("buildFilterClause", () => {
   })
 
   it("returns null for unknown operator", () => {
-    const r = buildFilterClause({ id: "1", column: "c", value: "x", operator: "UNKNOWN" as any })
+    const r = buildFilterClause({ id: "1", column: "c", value: "x", operator: "UNKNOWN" as never })
     expect(r).toBeNull()
   })
 })

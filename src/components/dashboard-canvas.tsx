@@ -6,6 +6,7 @@ import { LayoutDashboard, PlusCircle } from "lucide-react"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { useDatasetStore } from "@/stores/dataset"
 import { WidgetConfigEditor } from "@/components/widget-config-editor"
+import { ExploreWidgetEditor } from "@/components/explore-widget-editor"
 import { useLang } from "@/components/lang-provider"
 import { useQueryActions } from "@/hooks/use-query-orchestrator"
 import { useUiStore } from "@/stores/ui"
@@ -76,6 +77,8 @@ export function DashboardCanvas() {
   const [editingWidget, setEditingWidget] = useState<ChartWidget | null>(null)
   const [showSqlDialog, setShowSqlDialog] = useState(false)
   const [showAiDialog, setShowAiDialog] = useState(false)
+  const [exploreEditorOpen, setExploreEditorOpen] = useState(false)
+  const [exploreEditorWidgetId, setExploreEditorWidgetId] = useState<string | null>(null)
 
   const selectedTable = useDatasetStore((s) => s.selectedTable)
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
@@ -93,6 +96,30 @@ export function DashboardCanvas() {
     },
     [updateLayout]
   )
+
+  const addWidget = useDashboardsStore((s) => s.addWidget)
+
+  const handleNewExplore = useCallback(() => {
+    if (!activeDashboardId) return
+    const widgetId = crypto.randomUUID()
+    addWidget(activeDashboardId, {
+      id: widgetId,
+      type: "chart",
+      sql: "",
+      vizConfig: { type: "bar", xKey: "", title: "" },
+      source: "agent-chat",
+      lastRunAt: null,
+      datasetId: "",
+      exploreConfig: { datasetId: "", metrics: [], dimensions: [], rowLimit: 10000 },
+    })
+    setExploreEditorWidgetId(widgetId)
+    setExploreEditorOpen(true)
+  }, [activeDashboardId, addWidget])
+
+  const handleEditExplore = useCallback((widgetId: string) => {
+    setExploreEditorWidgetId(widgetId)
+    setExploreEditorOpen(true)
+  }, [])
 
   if (!activeDashboard) {
     return (
@@ -129,9 +156,10 @@ export function DashboardCanvas() {
         onUnpublish={handleEditDraft}
         onNewSql={() => setShowSqlDialog(true)}
         onNewAi={() => setShowAiDialog(true)}
-        onNewExplore={() => useUiStore.getState().setPivotView("explore")}
+        onNewExplore={handleNewExplore}
         onEditWidget={setEditingWidget}
         onEditSql={handleEditSql}
+        onEditExplore={handleEditExplore}
         onLayoutChange={handleLayoutChange}
       />
       {editingWidget && (
@@ -144,6 +172,14 @@ export function DashboardCanvas() {
             updateWidget(activeDashboardId, editingWidget.id, { vizConfig: newConfig })
             setEditingWidget(null)
           }}
+        />
+      )}
+      {activeDashboardId && exploreEditorWidgetId && (
+        <ExploreWidgetEditor
+          open={exploreEditorOpen}
+          onOpenChange={setExploreEditorOpen}
+          dashboardId={activeDashboardId}
+          widgetId={exploreEditorWidgetId}
         />
       )}
       {activeDashboardId && (

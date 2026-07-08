@@ -14,6 +14,7 @@ interface BasicTabProps extends TabSharedProps {
   onAddSeries: () => void
   onRemoveSeries: (index: number) => void
   onUpdateSeriesField: (index: number, field: keyof SeriesConfig, value: string) => void
+  extraChartTypeOptions?: { value: string; key: string }[]
 }
 
 export function BasicTab({
@@ -22,8 +23,12 @@ export function BasicTab({
   onAddSeries,
   onRemoveSeries,
   onUpdateSeriesField,
+  extraChartTypeOptions,
 }: BasicTabProps) {
   const { _t } = useLang()
+  const typeOptions = extraChartTypeOptions
+    ? [...CHART_TYPE_OPTIONS, ...extraChartTypeOptions]
+    : CHART_TYPE_OPTIONS
   return (
     <div className="space-y-4 pr-1 pt-3">
       <div>
@@ -31,7 +36,7 @@ export function BasicTab({
         <Select value={local.type} onValueChange={(value) => value && updateField("type", value)}>
           <SelectTrigger className="mt-1.5 h-9 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {CHART_TYPE_OPTIONS.map((opt) => (
+            {typeOptions.map((opt) => (
               <SelectItem key={opt.value} value={opt.value} className="text-sm">{_t(opt.key)}</SelectItem>
             ))}
           </SelectContent>

@@ -8,9 +8,7 @@ import { refreshWidget } from "@/lib/widget-creation-lifecycle"
 import { buildFilteredSql } from "@/lib/widget-filter-sql"
 import { useDashboardsStore, type ChartWidget, type DashboardFilter } from "@/stores/dashboards"
 import { useDatasetRegistryStore } from "@/stores/dataset-registry"
-import { useExploreConfigStore } from "@/stores/explore-config"
-import { useUiStore } from "@/stores/ui"
-import { AlertTriangle, RefreshCw, Settings2, FileCode, Trash2, Compass } from "lucide-react"
+import { AlertTriangle, RefreshCw, Settings2, SlidersHorizontal, FileCode, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 export function formatTimeAgo(ts: number, _t: (key: string) => string): string {
@@ -31,6 +29,7 @@ export interface ChartWidgetRendererProps {
   viewOnly?: boolean
   onEditConfig?: (widget: ChartWidget) => void
   onEditSql?: (widget: ChartWidget) => void
+  onEditExplore?: (widgetId: string) => void
   dashboardFilters: DashboardFilter[]
   onAddFilter: (dashboardId: string, filter: DashboardFilter) => void
   onRemoveFilter: (dashboardId: string, filterId: string) => void
@@ -44,6 +43,7 @@ export function ChartWidgetRenderer({
   viewOnly = false,
   onEditConfig,
   onEditSql,
+  onEditExplore,
   dashboardFilters,
   onAddFilter,
   onRemoveFilter,
@@ -207,23 +207,30 @@ export function ChartWidgetRenderer({
               <FileCode className="w-3.5 h-3.5" />
             </button>
           )}
-          {!viewOnly && !widget.datasetId && (
+          {!viewOnly && onEditExplore && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                const newDatasetId = useDatasetRegistryStore.getState().createDataset({
-                  name: `迁移: ${config.title || "SQL"}`,
-                  type: "virtual",
-                  sql: widget.sql,
-                  columns: [],
-                })
-                useExploreConfigStore.getState().setPendingDatasetId(newDatasetId)
-                useUiStore.getState().setPivotView("explore")
+                if (widget.datasetId) {
+                  onEditExplore(widget.id)
+                } else {
+                  const newDatasetId = useDatasetRegistryStore.getState().createDataset({
+                    name: `迁移: ${config.title || "SQL"}`,
+                    type: "virtual",
+                    sql: widget.sql,
+                    columns: [],
+                  })
+                  useDashboardsStore.getState().updateWidget(dashboardId, widget.id, {
+                    datasetId: newDatasetId,
+                    exploreConfig: { datasetId: newDatasetId, metrics: [], dimensions: [], rowLimit: 10000 },
+                  })
+                  onEditExplore(widget.id)
+                }
               }}
               className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-              title={_t("dashboard.migrate_to_explore")}
+              title={widget.datasetId ? _t("dashboard.edit_config") : _t("dashboard.migrate_to_explore")}
             >
-              <Compass className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="w-3.5 h-3.5" />
             </button>
           )}
           {!viewOnly && (
