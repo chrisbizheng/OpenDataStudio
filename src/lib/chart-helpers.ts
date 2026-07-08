@@ -1,5 +1,5 @@
 import type { EChartsOption } from "echarts"
-import type { ChartConfig } from "@/lib/chart-types"
+import type { ChartConfig, ConditionalFormattingRule } from "@/lib/chart-types"
 import {
   COLORS,
   COLOR_THEMES,
@@ -118,6 +118,33 @@ export function prepareChartData(
     stats: yKey ? computeStats(rawData, yKey) : { max: 0, maxItem: null },
     yKey,
   }
+}
+
+export function evaluateConditionalFormatting(
+  params: { dataIndex: number },
+  rules: ConditionalFormattingRule[],
+  chartData: Record<string, unknown>[],
+  xKey: string,
+): string | undefined {
+  const dataPoint = chartData[params.dataIndex]
+  if (!dataPoint) return undefined
+
+  for (const rule of rules) {
+    const val = Number(dataPoint[rule.column])
+    if (isNaN(val)) continue
+    let match = false
+    switch (rule.operator) {
+      case ">":  match = val > rule.value; break
+      case "<":  match = val < rule.value; break
+      case ">=": match = val >= rule.value; break
+      case "<=": match = val <= rule.value; break
+      case "=":  match = val === rule.value; break
+      case "!=": match = val !== rule.value; break
+    }
+    if (match) return rule.color
+  }
+
+  return undefined
 }
 
 export function buildEChartsOption(params: ChartPreparedData & {
@@ -283,6 +310,21 @@ export function buildEChartsOption(params: ChartPreparedData & {
             const inner = sc.pieRadius ?? 50
             si.radius = [`${inner}%`, "70%"]
           }
+        }
+      }
+    }
+  }
+
+  if (config.conditionalFormatting?.length && ["bar", "line", "area", "scatter"].includes(resolvedType)) {
+    const cfRules = config.conditionalFormatting
+    if (Array.isArray(opt.series)) {
+      for (const s of opt.series) {
+        const si = s as Record<string, unknown>
+        const existingItemStyle = (si.itemStyle as object) || {}
+        si.itemStyle = {
+          ...existingItemStyle,
+          color: (params: { dataIndex: number }) =>
+            evaluateConditionalFormatting(params, cfRules, chartData, resolvedXKey),
         }
       }
     }

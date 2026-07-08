@@ -4,20 +4,61 @@ import type { DashboardFilter } from "@/stores/dashboards"
 /** Characters that are safe in ClickHouse column identifiers */
 const SAFE_COLUMN_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
 
+/**
+ * Build a single WHERE clause fragment from a DashboardFilter.
+ * Returns null if the filter should be skipped (empty value, bad column, etc).
+ */
+export function buildFilterClause(filter: DashboardFilter): string | null {
+  // Validate column name against injection: only allow alphanumeric + underscore
+  if (!SAFE_COLUMN_RE.test(filter.column)) {
+    console.warn(`[buildFilteredSql] Invalid column name rejected: "${filter.column}"`)
+    return null
+  }
+
+  const op = filter.operator ?? "="
+
+  switch (op) {
+    case "=":
+    case "!=":
+    case ">":
+    case "<":
+    case ">=":
+    case "<=": {
+      if (!filter.value) return null
+      return `\`${filter.column}\` ${op} '${escapeSqlString(filter.value)}'`
+    }
+
+    case "IN":
+    case "NOT IN": {
+      if (!filter.values || filter.values.length === 0) return null
+      const inValues = filter.values.map((v) => `'${escapeSqlString(v)}'`).join(", ")
+      return `\`${filter.column}\` ${op} (${inValues})`
+    }
+
+    case "LIKE": {
+      if (!filter.value) return null
+      const likeVal = escapeSqlString(filter.value)
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_")
+      return `\`${filter.column}\` LIKE '%${likeVal}%'`
+    }
+
+    case "BETWEEN": {
+      if (!filter.values || filter.values.length < 2) return null
+      return `\`${filter.column}\` BETWEEN '${escapeSqlString(filter.values[0])}' AND '${escapeSqlString(filter.values[1])}'`
+    }
+
+    default:
+      console.warn(`[buildFilteredSql] Unknown operator: "${op}"`)
+      return null
+  }
+}
+
 /** Wrap SQL with dashboard filter WHERE clauses */
 export function buildFilteredSql(baseSql: string, filters: DashboardFilter[]): string {
   if (filters.length === 0) return baseSql
   const whereClauses = filters
-    .filter((f) => f.column && f.value)
-    .map((f) => {
-      // Validate column name against injection: only allow alphanumeric + underscore
-      if (!SAFE_COLUMN_RE.test(f.column)) {
-        console.warn(`[buildFilteredSql] Invalid column name rejected: "${f.column}"`)
-        return null
-      }
-      const escapedValue = escapeSqlString(String(f.value))
-      return `\`${f.column}\` = '${escapedValue}'`
-    })
+    .map(buildFilterClause)
     .filter(Boolean)
     .join(" AND ")
 

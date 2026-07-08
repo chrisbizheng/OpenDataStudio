@@ -13,6 +13,7 @@ import { AxisTab } from "./widget-config-editor/axis-tab"
 import { StyleTab } from "./widget-config-editor/style-tab"
 import { LabelTab } from "./widget-config-editor/label-tab"
 import { JsonTab } from "./widget-config-editor/json-tab"
+import { CfTab } from "./widget-config-editor/cf-tab"
 
 interface WidgetConfigEditorProps {
   open: boolean
@@ -104,6 +105,7 @@ export function WidgetConfigEditor({
             {showAxis && <TabsTrigger value="axis" className="text-xs">{_t("chart_tab_axis")}</TabsTrigger>}
             <TabsTrigger value="style" className="text-xs">{_t("chart_tab_style")}</TabsTrigger>
             <TabsTrigger value="label" className="text-xs">{_t("chart_tab_label")}</TabsTrigger>
+            <TabsTrigger value="cf" className="text-xs">{_t("dashboard.conditional_formatting")}</TabsTrigger>
             <TabsTrigger value="json" className="text-xs">{_t("chart_tab_json")}</TabsTrigger>
           </TabsList>
 
@@ -130,6 +132,9 @@ export function WidgetConfigEditor({
             <LabelTab {...tabShared} />
           </TabsContent>
 
+          <TabsContent value="cf" className="flex-1 min-h-0 overflow-y-auto">
+            <CfTab {...tabShared} />
+          </TabsContent>
           <TabsContent value="json" className="flex-1 min-h-0 overflow-y-auto">
             <JsonTab jsonText={jsonText} jsonError={jsonError} onChange={handleJsonChange} />
           </TabsContent>

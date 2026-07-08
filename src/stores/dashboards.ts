@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { ChartConfig } from "@/lib/chart-types"
+import type { ExploreConfig } from "@/lib/metric-types"
 
 // ── Widget types (discriminated union, MVP only chart) ──
 
@@ -16,6 +17,10 @@ export interface ChartWidget {
   lastRunAt: number | null
   /** Original SQL without filter wrappers (Q18). Set when widget is created. */
   baseSql?: string
+  /** BI layer: dataset reference for metric-first widgets (Phase 1). */
+  datasetId?: string
+  /** BI layer: metric-first config. When set, SQL is generated from this, not `sql` field. */
+  exploreConfig?: ExploreConfig
 }
 
 // Placeholder types for future expansion
@@ -43,8 +48,37 @@ export interface WidgetLayout {
 export interface DashboardFilter {
   id: string
   column: string
+  /** Single value for =, !=, >, <, >=, <=, LIKE. Required for backward compat. */
   value: string
+  /** Multi-value for IN, NOT IN. For BETWEEN: [from, to]. */
+  values?: string[]
+  /** Filter operator. Defaults to "=". Old data has no operator = "=". */
+  operator?: FilterOperator
+  /** Controls UI rendering. Defaults to "text". */
+  type?: FilterValueType
+  /** Display name. Defaults to column. */
+  name?: string
+  /** "global" applies to all widgets; "scoped" applies to scopedWidgets only. Defaults to "global". */
+  scope?: FilterScope
+  /** Widget IDs when scope="scoped". */
+  scopedWidgets?: string[]
 }
+
+export type FilterOperator =
+  | "="
+  | "!="
+  | ">"
+  | "<"
+  | ">="
+  | "<="
+  | "IN"
+  | "NOT IN"
+  | "LIKE"
+  | "BETWEEN"
+
+export type FilterValueType = "text" | "number" | "date" | "select" | "multi-select"
+
+export type FilterScope = "global" | "scoped"
 
 // ── Dashboard ──
 
@@ -89,8 +123,9 @@ interface DashboardsStore {
   updateWidgetLastRunAt: (dashboardId: string, widgetId: string, timestamp: number) => void
   updateWidget: (dashboardId: string, widgetId: string, updates: Partial<Omit<ChartWidget, "id" | "type">>) => void
 
-  // Filter management (Phase 4 stubs)
+  // Filter management (Phase 4)
   addFilter: (dashboardId: string, filter: DashboardFilter) => void
+  updateFilter: (dashboardId: string, filterId: string, updates: Partial<DashboardFilter>) => void
   removeFilter: (dashboardId: string, filterId: string) => void
   clearFilters: (dashboardId: string) => void
 }
@@ -239,12 +274,21 @@ export const useDashboardsStore = create<DashboardsStore>()(
           })),
         })),
 
-      // ── Filter management (Phase 4 stubs) ──
+      // ── Filter management (Phase 4) ──
 
       addFilter: (dashboardId, filter) =>
         set((s) => ({
           dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
             filters: [...d.filters, filter],
+          })),
+        })),
+
+      updateFilter: (dashboardId, filterId, updates) =>
+        set((s) => ({
+          dashboards: updateOneAndTouch(s.dashboards, dashboardId, (d) => ({
+            filters: d.filters.map((f) =>
+              f.id === filterId ? { ...f, ...updates } : f
+            ),
           })),
         })),
 

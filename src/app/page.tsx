@@ -8,6 +8,7 @@ import { StatusBar } from "@/components/status-bar"
 import { GridView } from "@/components/grid-view"
 import { PivotView } from "@/components/pivot-view"
 import { DashboardCanvas } from "@/components/dashboard-canvas"
+import { ExplorePanel } from "@/components/explore-panel"
 import { AgentChat } from "@/components/agent-chat"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LangToggle } from "@/components/lang-toggle"
@@ -145,10 +146,22 @@ function HomeContent() {
                   >
                     {_t("tab.dashboard")}
                   </button>
+                  <button
+                    onClick={() => setPivotView("explore")}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      pivotView === "explore"
+                        ? "text-foreground border-b-2 border-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {_t("tab.explore")}
+                  </button>
                 </div>
 
                 {pivotView === "dashboard" ? (
                   <DashboardCanvas />
+                ) : pivotView === "explore" ? (
+                  <ExplorePanel />
                 ) : hasContent ? (
                   pivotView === "grid" ? (
                     <GridView />

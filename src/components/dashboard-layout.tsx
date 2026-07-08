@@ -30,6 +30,7 @@ interface DashboardLayoutProps {
   onUnpublish?: () => void
   onNewSql?: () => void
   onNewAi?: () => void
+  onNewExplore?: () => void
   onEditWidget?: (widget: ChartWidget) => void
   onEditSql?: (widget: ChartWidget) => void
   onLayoutChange?: (dashboardId: string, layout: WidgetLayout[]) => void
@@ -47,6 +48,7 @@ export function DashboardLayout({
   onUnpublish,
   onNewSql,
   onNewAi,
+  onNewExplore,
   onEditWidget,
   onEditSql,
   onLayoutChange,
@@ -106,6 +108,12 @@ export function DashboardLayout({
                 <MessageSquare className="h-3 w-3 mr-1" />
                 {_t("dashboard.new_ai")}
               </Button>
+              {onNewExplore && (
+                <Button size="xs" variant="outline" onClick={onNewExplore}>
+                  <BarChart3 className="h-3 w-3 mr-1" />
+                  {_t("dashboard.new_explore")}
+                </Button>
+              )}
             </>
           )}
           {isPublished ? (
@@ -161,6 +169,15 @@ export function DashboardLayout({
     )
   }
 
+  const getWidgetFilters = useCallback(
+    (filters: DashboardFilter[], widgetId: string): DashboardFilter[] => {
+      return filters.filter((f) =>
+        !f.scope || f.scope === "global" || (f.scopedWidgets || []).includes(widgetId)
+      )
+    },
+    [],
+  )
+
   const renderWidgets = () => {
     if (dashboard.widgets.length === 0) {
       return (
@@ -197,7 +214,7 @@ export function DashboardLayout({
                 isDark={isDark}
                 isPublished={isPublished}
                 viewOnly={isView}
-                dashboardFilters={dashboard.filters}
+                dashboardFilters={getWidgetFilters(dashboard.filters, widget.id)}
                 onAddFilter={onAddFilter}
                 onRemoveFilter={onRemoveFilter}
                 dashboardId={dashboard.id}
@@ -230,6 +247,10 @@ export function DashboardLayout({
             onAddFilter={onAddFilter}
             onRemoveFilter={onRemoveFilter}
             onClearFilters={onClearFilters}
+            widgets={dashboard.widgets.map((w) => ({
+              id: w.id,
+              title: w.type === "chart" ? (w as ChartWidget).vizConfig?.title : undefined,
+            }))}
           />
           <div className="flex-1 min-h-0 overflow-auto">
             <style>{DASHBOARD_GRID_CSS}</style>
@@ -251,6 +272,10 @@ export function DashboardLayout({
         onAddFilter={onAddFilter}
         onRemoveFilter={onRemoveFilter}
         onClearFilters={onClearFilters}
+        widgets={dashboard.widgets.map((w) => ({
+          id: w.id,
+          title: w.type === "chart" ? (w as ChartWidget).vizConfig?.title : undefined,
+        }))}
       />
       <div ref={containerRef} className="flex-1 min-h-0 overflow-auto">
         <style>{DASHBOARD_GRID_CSS}</style>

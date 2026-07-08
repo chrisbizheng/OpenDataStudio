@@ -129,6 +129,7 @@ export function DashboardCanvas() {
         onUnpublish={handleEditDraft}
         onNewSql={() => setShowSqlDialog(true)}
         onNewAi={() => setShowAiDialog(true)}
+        onNewExplore={() => useUiStore.getState().setPivotView("explore")}
         onEditWidget={setEditingWidget}
         onEditSql={handleEditSql}
         onLayoutChange={handleLayoutChange}

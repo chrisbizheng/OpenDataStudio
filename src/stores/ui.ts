@@ -4,12 +4,12 @@ import { persist } from "zustand/middleware"
 interface UiState {
   sidebarOpen: boolean
   rightPanelOpen: boolean
-  pivotView: "grid" | "pivot" | "dashboard"
+  pivotView: "grid" | "pivot" | "dashboard" | "explore"
   sidebarWidth: number
   rightPanelWidth: number
   toggleSidebar: () => void
   toggleRightPanel: () => void
-  setPivotView: (view: "grid" | "pivot" | "dashboard") => void
+  setPivotView: (view: "grid" | "pivot" | "dashboard" | "explore") => void
   setSidebarWidth: (w: number) => void
   setRightPanelWidth: (w: number) => void
 }

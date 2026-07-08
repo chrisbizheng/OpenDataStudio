@@ -7,7 +7,10 @@ import { widgetCache, type CachedQueryResult } from "@/lib/widget-cache"
 import { refreshWidget } from "@/lib/widget-creation-lifecycle"
 import { buildFilteredSql } from "@/lib/widget-filter-sql"
 import { useDashboardsStore, type ChartWidget, type DashboardFilter } from "@/stores/dashboards"
-import { AlertTriangle, RefreshCw, Settings2, FileCode, Trash2 } from "lucide-react"
+import { useDatasetRegistryStore } from "@/stores/dataset-registry"
+import { useExploreConfigStore } from "@/stores/explore-config"
+import { useUiStore } from "@/stores/ui"
+import { AlertTriangle, RefreshCw, Settings2, FileCode, Trash2, Compass } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 export function formatTimeAgo(ts: number, _t: (key: string) => string): string {
@@ -155,6 +158,11 @@ export function ChartWidgetRenderer({
           <span className="text-xs font-medium text-foreground truncate">
             {config.title || _t("dashboard.chart_title")}
           </span>
+          {widget.datasetId ? (
+            <Badge variant="default" className="text-[10px] shrink-0">{_t("dashboard.mode_explore")}</Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px] shrink-0">{_t("dashboard.mode_sql")}</Badge>
+          )}
           {dashboardFilters.length > 0 && (
             <Badge variant="secondary" className="text-[10px] shrink-0">
               {_t("dashboard.filtered")}
@@ -197,6 +205,25 @@ export function ChartWidgetRenderer({
               title={_t("dashboard.edit_sql")}
             >
               <FileCode className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {!viewOnly && !widget.datasetId && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const newDatasetId = useDatasetRegistryStore.getState().createDataset({
+                  name: `迁移: ${config.title || "SQL"}`,
+                  type: "virtual",
+                  sql: widget.sql,
+                  columns: [],
+                })
+                useExploreConfigStore.getState().setPendingDatasetId(newDatasetId)
+                useUiStore.getState().setPivotView("explore")
+              }}
+              className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              title={_t("dashboard.migrate_to_explore")}
+            >
+              <Compass className="w-3.5 h-3.5" />
             </button>
           )}
           {!viewOnly && (

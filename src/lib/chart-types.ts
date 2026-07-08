@@ -28,6 +28,14 @@ export type RawViz = {
   }
 } | null | undefined
 
+export interface ConditionalFormattingRule {
+  id: string
+  column: string
+  operator: ">" | "<" | ">=" | "<=" | "=" | "!="
+  value: number
+  color: string
+}
+
 export interface ChartConfig {
   type: string
   xKey: string
@@ -90,5 +98,6 @@ export interface ChartConfig {
     numberFormat?: string
     decimalPlaces?: number
   }
+  conditionalFormatting?: ConditionalFormattingRule[]
   jsonOverride?: string
 }
