@@ -1,20 +1,20 @@
 "use client"
 
+import { useLang } from "@/components/lang-provider"
 import type { AssistantMessage } from "@/lib/agent-types"
 import type { DeepDiveItem } from "@/lib/deep-dive-directions"
 import { useChartDetailStore } from "@/stores/chart-detail"
 import { suggestDeepDiveDirections } from "@/lib/deep-dive-directions"
 import { getChartNodeContext } from "./chart-node-context"
 
-export function ChartDetailCard({ msg, index, schema, lang, _t, onGenerateAiDirections, onSendMessage }: {
+export function ChartDetailCard({ msg, index, schema, onGenerateAiDirections, onSendMessage }: {
   msg: AssistantMessage
   index: number
   schema?: { name: string; type: string; comment?: string }[]
-  lang: "zh" | "en"
-  _t: (key: string) => string
   onGenerateAiDirections: (msg: AssistantMessage, item: DeepDiveItem, localDirections: { label: string; prompt: string }[]) => Promise<void>
   onSendMessage: (text: string) => void
 }) {
+  const { _t, lang } = useLang()
   const {
     clickedChart, deepDiveOpen, aiDirections, isGeneratingDirections,
     setClickedChart, setDeepDiveOpen, setAiDirections,

@@ -1,6 +1,9 @@
 "use client"
 
-export function DataTable({ rows, columns, _t }: { rows: unknown[][]; columns: string[]; _t: (k: string) => string }) {
+import { useLang } from "@/components/lang-provider"
+
+export function DataTable({ rows, columns }: { rows: unknown[][]; columns: string[] }) {
+  const { _t } = useLang()
   return (
     <div className="overflow-x-auto border border-border rounded">
       <table className="w-full text-[10px] border-collapse">

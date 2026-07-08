@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useMemo, useCallback } from "react"
+import { buildChatKey } from "@/stores/agent-chats"
 import { useStreamChat } from "@/hooks/use-stream-chat"
 import { useAiSuggestions } from "@/hooks/use-ai-suggestions"
 import { useMessageHistory } from "@/hooks/use-message-history"
@@ -10,44 +11,33 @@ export function useAgentChat({
   schema,
   selectedDatabase,
   onSqlGenerated,
-  lang,
-  welcomeContent,
-  _t,
 }: {
   tableName?: string | null
   schema?: { name: string; type: string; comment?: string }[]
   selectedDatabase?: string | null
   onSqlGenerated?: (sql: string) => void
-  lang: "zh" | "en"
-  welcomeContent: string
-  _t: (key: string) => string
 }) {
   const [input, setInput] = useState("")
+  const chatKey = useMemo(() => buildChatKey(selectedDatabase, tableName), [selectedDatabase, tableName])
 
   const history = useMessageHistory({
     selectedDatabase,
     tableName,
-    welcomeContent,
   })
 
   const ai = useAiSuggestions({
+    chatKey,
     tableName,
     schema,
     selectedDatabase,
-    lang,
   })
 
   const stream = useStreamChat({
-    lang,
+    chatKey,
     tableName,
     schema,
     selectedDatabase,
     onSqlGenerated,
-    _t,
-    onMessagesChange: history.setMessages,
-    onMessageUIChange: history.setMessageUI,
-    getMessages: history.getMessages,
-    onLoadingChange: history.setIsLoadingRef,
   })
 
   const clearConversation = useCallback(() => {
@@ -74,11 +64,10 @@ export function useAgentChat({
     isLoading: stream.isLoading,
     suggestions: ai.suggestions,
     aiInitialQuestions: ai.aiInitialQuestions,
-    aiFollowUpQuestions: ai.aiFollowUpQuestions,
     isGeneratingInitialQuestions: ai.isGeneratingInitialQuestions,
-    isGeneratingFollowUpQuestions: ai.isGeneratingFollowUpQuestions,
     chatRef: history.chatRef,
     abortRef: stream.abortRef,
+    chatKey,
     setInput,
     sendMessage,
     stopGeneration: stream.stopGeneration,

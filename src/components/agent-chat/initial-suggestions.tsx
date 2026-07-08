@@ -1,6 +1,8 @@
 "use client"
 
-export function InitialSuggestions({ isLoading, messagesLength, tableName, suggestions, aiInitialQuestions, isGeneratingInitialQuestions, onSend, onGenerateAiQuestions, _t, lang }: {
+import { useLang } from "@/components/lang-provider"
+
+export function InitialSuggestions({ isLoading, messagesLength, tableName, suggestions, aiInitialQuestions, isGeneratingInitialQuestions, onSend, onGenerateAiQuestions }: {
   isLoading: boolean
   messagesLength: number
   tableName?: string | null
@@ -9,9 +11,8 @@ export function InitialSuggestions({ isLoading, messagesLength, tableName, sugge
   isGeneratingInitialQuestions: boolean
   onSend: (text: string) => void
   onGenerateAiQuestions: (input: { localQuestions: string[]; target: "initial" | "followUp" }) => Promise<void>
-  _t: (k: string) => string
-  lang: "zh" | "en"
 }) {
+  const { _t } = useLang()
   if (isLoading || messagesLength !== 1 || !tableName || suggestions.length === 0) return null
   const initialQuestions = aiInitialQuestions ?? suggestions
   return (

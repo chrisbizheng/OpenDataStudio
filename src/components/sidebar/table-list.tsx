@@ -123,7 +123,7 @@ export function TableList({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="right">
-                    {table.name} · {table.engine} · {formatRowCount(table.rowCount)}行
+                    {table.name} · {table.engine} · {formatRowCount(table.rowCount)}{_t("grid.rows")}
                     {table.comment && <> · {table.comment}</>}
                   </TooltipContent>
                 </Tooltip>

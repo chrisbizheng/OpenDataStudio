@@ -1,15 +1,15 @@
 "use client"
 
+import { useLang } from "@/components/lang-provider"
 import type { AssistantMessage, Message } from "@/lib/agent-types"
 
-export function MessageActions({ msg, index, messages, lang, _t, onSendMessage }: {
+export function MessageActions({ msg, index, messages, onSendMessage }: {
   msg: AssistantMessage
   index: number
   messages: Message[]
-  lang: "zh" | "en"
-  _t: (key: string) => string
   onSendMessage: (text: string, baseMessages?: Message[]) => void
 }) {
+  const { _t } = useLang()
   const copyContent = () => {
     const parts: string[] = []
     if (msg.content && msg.content !== "Done.") parts.push(msg.content)

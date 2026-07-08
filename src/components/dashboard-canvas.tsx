@@ -6,8 +6,8 @@ import { LayoutDashboard, PlusCircle } from "lucide-react"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { useDatasetStore } from "@/stores/dataset"
 import { WidgetConfigEditor } from "@/components/widget-config-editor"
-import { useData } from "@/components/data-provider"
 import { useLang } from "@/components/lang-provider"
+import { useQueryActions } from "@/hooks/use-query-orchestrator"
 import { useUiStore } from "@/stores/ui"
 import { Button } from "@/components/ui/button"
 import type { ChartWidget, WidgetLayout } from "@/stores/dashboards"
@@ -19,12 +19,17 @@ import { DashboardList } from "@/components/dashboard-list"
 export function DashboardCanvas() {
   const { _t } = useLang()
 
-  const { activeDashboard, updateLayout, activeDashboardId, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, clearFilters, dashboards, createDashboard, isDirty: storeIsDirty } =
+  // Narrow selectors: re-render only when active dashboard or hasDashboards flag changes
+  const activeDashboard = useDashboardsStore(
+    useShallow((s) => s.dashboards.find((d) => d.id === s.activeDashboardId) ?? null)
+  )
+  const activeDashboardId = activeDashboard?.id ?? null
+  const hasDashboards = useDashboardsStore((s) => s.dashboards.length > 0)
+
+  const { updateLayout, saveDashboard, publishDashboard, unpublishDashboard, updateWidget, addFilter, removeFilter, clearFilters, createDashboard, setActiveDashboard } =
     useDashboardsStore(
       useShallow((s) => ({
-        activeDashboard: s.dashboards.find((d) => d.id === s.activeDashboardId) ?? null,
         updateLayout: s.updateLayout,
-        activeDashboardId: s.activeDashboardId,
         saveDashboard: s.saveDashboard,
         publishDashboard: s.publishDashboard,
         unpublishDashboard: s.unpublishDashboard,
@@ -32,20 +37,20 @@ export function DashboardCanvas() {
         addFilter: s.addFilter,
         removeFilter: s.removeFilter,
         clearFilters: s.clearFilters,
-        dashboards: s.dashboards,
         createDashboard: s.createDashboard,
-        isDirty: s.isDirty,
+        setActiveDashboard: s.setActiveDashboard,
       }))
     )
 
   const handleCreateDashboard = useCallback(() => {
     const id = createDashboard(_t("dashboard.list.defaultName"))
-    useDashboardsStore.getState().setActiveDashboard(id)
-  }, [createDashboard, _t])
+    setActiveDashboard(id)
+  }, [createDashboard, setActiveDashboard, _t])
 
-  const hasDashboards = dashboards.length > 0
-
-  const isDirty = activeDashboardId ? storeIsDirty(activeDashboardId) : false
+  // Derived: no store subscription needed, computed from activeDashboard fields
+  const isDirty = activeDashboard
+    ? activeDashboard.updatedAt > (activeDashboard.lastSavedAt ?? 0)
+    : false
 
   const handleSave = useCallback(() => {
     if (!activeDashboard) return
@@ -74,13 +79,13 @@ export function DashboardCanvas() {
 
   const selectedTable = useDatasetStore((s) => s.selectedTable)
   const selectedDatabase = useDatasetStore((s) => s.selectedDatabase)
-  const { queryLifecycle } = useData()
+  const { setSql, setPendingAutoExecute } = useQueryActions()
 
   const handleEditSql = useCallback((widget: ChartWidget) => {
-    queryLifecycle.setSql(widget.sql)
-    queryLifecycle.setPendingAutoExecute(widget.sql)
+    setSql(widget.sql)
+    setPendingAutoExecute(widget.sql)
     useUiStore.getState().setPivotView("grid")
-  }, [queryLifecycle])
+  }, [setSql, setPendingAutoExecute])
 
   const handleLayoutChange = useCallback(
     (dashboardId: string, layout: WidgetLayout[]) => {

@@ -14,12 +14,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## Developer Commands
 
 ```bash
-npm run dev      # Dev server on port 4000 (NOT default 3000)
-npm run build    # Production build (output: "standalone" for Docker)
-npm run lint     # ESLint 9 flat config
+npm run dev          # Dev server on port 4000 (NOT default 3000)
+npm run build        # Production build (output: "standalone" for Docker)
+npm run lint         # ESLint 9 flat config
+npm test             # Vitest run (single pass, 293 tests across 32 files)
+npm run test:watch   # Vitest watch mode
 ```
 
-**No `typecheck` or `test` scripts exist.** To type-check manually: `npx tsc --noEmit`. There is no test framework configured — do not assume Vitest/Jest/Playwright are available.
+**No `typecheck` script exists.** To type-check manually: `npx tsc --noEmit`. Test framework: **Vitest ^4.1.8** (`vitest.config.ts` at root). 32 test files in `src/**/__tests__/`. Baseline: 293 pass / 0 fail.
 
 ## 诊断流程（日志系统）
 
@@ -101,7 +103,7 @@ Browser (React 19)  →  Next.js API routes  →  ClickHouse (HTTP :8123)
 ```
 
 - **API routes** (`src/app/api/`) proxy all ClickHouse queries. Frontend never sees credentials.
-- **5 Zustand stores** (`src/stores/`): `dataset`, `query`, `saved-queries`, `sql-history`, `ui`. Some use `persist` middleware (localStorage).
+- **13 Zustand stores** (`src/stores/`): `dataset`, `dashboards`, `saved-queries`, `sql-history`, `ui`, `pivot-config`, `pivot-execution`, `pivot-history`, `agent-chats`, `agent-chat-session`, `llm-config`, `chart-detail`, `field-role`. Some use `persist` middleware (localStorage). Cross-store coordination via `pivot-facade.ts` (`resetAllPivot`/`loadPivotConfig`/`addCalculatedIndicatorWithValidation`).
 - **`src/stores/ui.ts`**: `activeTab` / `setActiveTab` removed — right panel is hard-wired to AgentChat. Old persisted `"schema"` value is ignored on rehydrate.
 - **i18n**: custom `useLang()` hook + `src/lib/i18n.ts` dictionary (`zh` | `en`). Not next-intl.
 - **Theme**: custom `ThemeProvider` in `src/components/theme-provider.tsx` — exports `{ theme, setTheme, resolved }`. Uses `resolved` (`"light"`/`"dark"`) for VTable / Chart keys.

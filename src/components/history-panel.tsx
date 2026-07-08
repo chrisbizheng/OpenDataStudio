@@ -35,7 +35,7 @@ export function HistoryPanel({ items, onSelect, onClear, emptyLabel }: HistoryPa
         >
           <div className="text-foreground truncate font-mono text-[11px]">{item.title}</div>
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-            <span>{formatTime(item.timestamp)}</span>
+            <span>{formatTime(item.timestamp, lang)}</span>
             {item.meta.map((m, i) => (
               <span key={i}>{m}</span>
             ))}

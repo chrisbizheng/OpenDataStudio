@@ -1,15 +1,16 @@
 "use client"
 
-export function SuggestionList({ questions, onSend, lang, _t, title, aiLabel, isGenerating, onGenerateAi }: {
+import { useLang } from "@/components/lang-provider"
+
+export function SuggestionList({ questions, onSend, title, aiLabel, isGenerating, onGenerateAi }: {
   questions: string[]
   onSend: (text: string) => void
-  lang: "zh" | "en"
-  _t: (key: string) => string
   title: string
   aiLabel: string
   isGenerating: boolean
   onGenerateAi: () => void
 }) {
+  const { _t } = useLang()
   if (questions.length === 0) return null
   return (
     <div className="space-y-1 mt-3 pt-2 border-t border-border/50 animate-fade-slide-in">

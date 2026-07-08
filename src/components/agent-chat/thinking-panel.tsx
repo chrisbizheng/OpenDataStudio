@@ -1,15 +1,16 @@
 "use client"
 
 import { SnakeSpinner } from "@/components/snake-spinner"
+import { useLang } from "@/components/lang-provider"
 import type { MessageUIState } from "@/lib/agent-types"
 
-export function ThinkingPanel({ ui, isLoading, isLast, onToggle, _t }: {
+export function ThinkingPanel({ ui, isLoading, isLast, onToggle }: {
   ui: MessageUIState | undefined
   isLoading: boolean
   isLast: boolean
   onToggle: () => void
-  _t: (key: string) => string
 }) {
+  const { _t } = useLang()
   if (ui === undefined) return null
   const isThinking = isLoading && isLast
   const elapsed = ui.thinkingElapsedMs ?? 0

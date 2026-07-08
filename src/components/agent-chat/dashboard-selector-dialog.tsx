@@ -1,21 +1,28 @@
 "use client"
 
 import { useState } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { useLang } from "@/components/lang-provider"
 import { useDashboardsStore } from "@/stores/dashboards"
 import { createWidget } from "@/lib/widget-creation-lifecycle"
 import type { AssistantMessage } from "@/lib/agent-types"
 
-export function DashboardSelectorDialog({ open, onOpenChange, msg, index, _t }: {
+export function DashboardSelectorDialog({ open, onOpenChange, msg, index }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   msg: AssistantMessage
   index: number
-  _t: (k: string) => string
 }) {
-  const { dashboards, createDashboard } = useDashboardsStore()
+  const { _t } = useLang()
+  const { dashboards, createDashboard } = useDashboardsStore(
+    useShallow((s) => ({
+      dashboards: s.dashboards,
+      createDashboard: s.createDashboard,
+    }))
+  )
   const [adding, setAdding] = useState<string | null>(null)
   const [showNewInput, setShowNewInput] = useState(false)
   const [newName, setNewName] = useState("")

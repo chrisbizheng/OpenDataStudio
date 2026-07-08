@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { cn } from "@/lib/utils"
 import { Sidebar } from "@/components/sidebar"
@@ -18,7 +18,8 @@ import { useLang } from "@/components/lang-provider"
 import { Database } from "lucide-react"
 import { useUiStore } from "@/stores/ui"
 import { ResizeHandle } from "@/components/resize-handle"
-import { useQueryOrchestrator } from "@/hooks/use-query-orchestrator"
+import { useQueryController, useQueryState, useSchema, useQueryActions } from "@/hooks/use-query-orchestrator"
+import { useDatasetStore } from "@/stores/dataset"
 
 export default function Home() {
   return (
@@ -52,32 +53,17 @@ function HomeContent() {
     setPivotView: s.setPivotView,
   })))
 
-  const {
-    selectedTable,
-    schema,
-    selectedDatabase,
-    data,
-    isExecuting,
-    error,
-    sort,
-    searchQuery,
-    sql,
-    pendingAutoExecute,
-    loadedRows,
-    setSearchQuery,
-    setPendingAutoExecute,
-    loadMore,
-    cancel,
-    handleSort,
-    handleSqlExecute,
-    handleDrilldown,
-  } = useQueryOrchestrator()
-
-  const [sqlText, setSqlText] = useState("")
+  useQueryController()
+  const { data } = useQueryState()
+  const schema = useSchema()
+  const { handleDrilldown } = useQueryActions()
+  const { selectedTable, selectedDatabase } = useDatasetStore(useShallow((s) => ({
+    selectedTable: s.selectedTable,
+    selectedDatabase: s.selectedDatabase,
+  })))
 
   const handleAgentSqlGenerated = useCallback(
     (sql: string) => {
-      setSqlText(sql)
       setPivotView("grid")
     },
     [setPivotView]
@@ -165,36 +151,15 @@ function HomeContent() {
                   <DashboardCanvas />
                 ) : hasContent ? (
                   pivotView === "grid" ? (
-                    <GridView
-                      data={data}
-                      isExecuting={isExecuting}
-                      error={error}
-                      schema={schema}
-                      selectedTable={selectedTable}
-                      selectedDatabase={selectedDatabase}
-                      sort={sort}
-                      searchQuery={searchQuery}
-                      sql={sql}
-                      pendingAutoExecute={pendingAutoExecute}
-                      loadedRows={loadedRows}
-                      onSort={handleSort}
-                      onSearchChange={setSearchQuery}
-                      onLoadMore={loadMore}
-                      onExecuteSql={handleSqlExecute}
-                      onCancel={cancel}
-                      onSqlGenerated={handleAgentSqlGenerated}
-                      onSetPendingAutoExecute={setPendingAutoExecute}
-                    />
+                    <GridView />
                   ) : selectedTable && selectedDatabase ? (
                     <PivotView
-                      schema={schema}
-                      selectedTable={selectedTable}
-                      selectedDatabase={selectedDatabase}
+                      tableRef={{ schema, tableName: selectedTable, database: selectedDatabase }}
                       onDrilldown={handleDrilldown}
                     />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-                      请先选择表
+                      {_t("grid.select_table_first")}
                     </div>
                   )
                 ) : (

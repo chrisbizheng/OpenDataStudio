@@ -16,7 +16,7 @@ import { CH_FUNCTIONS, AGG_FUNCTIONS, CATEGORY_LABELS, type FuncCategory } from 
 import { getLocalRecommendations, type CalcRecommendation } from "@/lib/calc-recommendations"
 import { useAiCalcRecommendation } from "@/hooks/use-ai-calc-recommendation"
 import { useLang } from "@/components/lang-provider"
-import type { ColumnMeta } from "@/lib/types"
+import type { ColumnMeta, TableRef } from "@/lib/types"
 
 interface CalculatedIndicatorDialogProps {
   open: boolean
@@ -25,9 +25,7 @@ interface CalculatedIndicatorDialogProps {
   existing?: CalculatedIndicator
   availableIndicators: PivotIndicator[]
   existingCalculated: CalculatedIndicator[]
-  schema: ColumnMeta[]
-  tableName: string
-  database: string
+  tableRef: TableRef
 }
 
 function createEmptyLogic(): ExpressionNode {
@@ -61,11 +59,10 @@ export function CalculatedIndicatorDialog({
   existing,
   availableIndicators,
   existingCalculated,
-  schema,
-  tableName,
-  database,
+  tableRef,
 }: CalculatedIndicatorDialogProps) {
   const { _t, lang } = useLang()
+  const { schema, tableName, database } = tableRef
   const [title, setTitle] = useState(existing?.title ?? "")
   const [logic, setLogic] = useState<ExpressionNode>(existing?.logic ?? createEmptyLogic())
   const [format, setFormat] = useState<IndicatorFormat>(existing?.format ?? "number")
@@ -95,9 +92,7 @@ export function CalculatedIndicatorDialog({
   const ai = useAiCalcRecommendation({
     lang,
     availableIndicators,
-    schema,
-    tableName,
-    database,
+    tableRef,
     allIndicatorKeys,
     _t,
   })
@@ -392,11 +387,10 @@ export function CalculatedIndicatorDialog({
               insertRef={insertRef}
               appendToLogic={appendToLogic}
               insertAgg={insertAgg}
-              _t={_t}
             />
 
             {/* Expression Editor */}
-            <div role="group" aria-label="表达式编辑" className="border border-border rounded p-2 flex flex-col gap-2">
+            <div role="group" aria-label={_t("calc_ind.expression")} className="border border-border rounded p-2 flex flex-col gap-2">
               <div className="text-xs font-medium text-muted-foreground">{_t("calc_ind.expression")}</div>
               <textarea
                 value={textInput}
@@ -422,7 +416,6 @@ export function CalculatedIndicatorDialog({
               setFuncSearch={setFuncSearch}
               filteredFunctions={filteredFunctions}
               insertCall={insertCall}
-              _t={_t}
             />
           </div>
 
@@ -489,7 +482,6 @@ function FieldPanel({
   schema, availableIndicators, existingCalculated, existing,
   aggButtonItems, aggVirtualizer, sidePanelRef,
   insertField, insertRef, appendToLogic, insertAgg,
-  _t,
 }: {
   schema: ColumnMeta[]
   availableIndicators: PivotIndicator[]
@@ -502,12 +494,12 @@ function FieldPanel({
   insertRef: (k: string) => void
   appendToLogic: (n: ExpressionNode) => void
   insertAgg: (f: string, c: string) => void
-  _t: (k: string) => string
 }) {
+  const { _t } = useLang()
   const hasNoItems = schema.length === 0 && availableIndicators.length === 0 && existingCalculated.filter((ci) => ci.key !== existing?.key).length === 0
 
   return (
-    <div ref={sidePanelRef} role="group" aria-label="可用字段" className="border border-border rounded p-2 overflow-y-auto max-h-[240px]">
+    <div ref={sidePanelRef} role="group" aria-label={_t("calc_ind.available_fields")} className="border border-border rounded p-2 overflow-y-auto max-h-[240px]">
       <div className="text-xs font-medium text-muted-foreground mb-1">{_t("calc_ind.available_fields")}</div>
       {hasNoItems && (
         <div className="text-xs text-muted-foreground py-4 text-center">{_t("calc_ind.no_fields")}</div>
@@ -565,17 +557,17 @@ function FieldPanel({
 }
 
 function FunctionPanel({
-  funcSearch, setFuncSearch, filteredFunctions, insertCall, _t,
+  funcSearch, setFuncSearch, filteredFunctions, insertCall,
 }: {
   funcSearch: string
   setFuncSearch: (v: string) => void
   filteredFunctions: typeof CH_FUNCTIONS
   insertCall: (name: string) => void
-  _t: (k: string) => string
 }) {
+  const { _t } = useLang()
   return (
-    <div role="group" aria-label="函数列表" className="border border-border rounded p-2 overflow-y-auto max-h-[240px]">
-      <div className="text-xs font-medium text-muted-foreground mb-1">函数</div>
+    <div role="group" aria-label={_t("calc_ind.functions")} className="border border-border rounded p-2 overflow-y-auto max-h-[240px]">
+      <div className="text-xs font-medium text-muted-foreground mb-1">{_t("calc_ind.functions")}</div>
       <Input value={funcSearch} onChange={(e) => setFuncSearch(e.target.value)} placeholder={_t("calc_ind.search_functions")} className="h-6 text-xs mb-1" />
       {(["logic", "arithmetic", "string", "date", "array"] as FuncCategory[]).map((cat) => {
         const funcs = filteredFunctions.filter((f) => f.category === cat)

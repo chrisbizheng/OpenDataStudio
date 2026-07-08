@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useDashboardsStore } from "@/stores/dashboards";
 import { useLang } from "@/components/lang-provider";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,16 @@ export function DashboardList() {
     deleteDashboard,
     updateDashboard,
     setActiveDashboard,
-  } = useDashboardsStore();
+  } = useDashboardsStore(
+    useShallow((s) => ({
+      dashboards: s.dashboards,
+      activeDashboardId: s.activeDashboardId,
+      createDashboard: s.createDashboard,
+      deleteDashboard: s.deleteDashboard,
+      updateDashboard: s.updateDashboard,
+      setActiveDashboard: s.setActiveDashboard,
+    }))
+  );
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");

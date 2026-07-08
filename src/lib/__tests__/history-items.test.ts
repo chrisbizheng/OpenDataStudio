@@ -15,7 +15,7 @@ describe("history items", () => {
     ).toEqual({
       id: "1",
       title: "SELECT 1",
-      meta: ["orders", "10 rows", "0.12s"],
+      meta: ["orders", "10 行", "0.12s"],
       timestamp: 1000,
     })
   })

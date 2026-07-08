@@ -3,15 +3,16 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { useLang } from "@/components/lang-provider"
 
-export function Header({ tableName, isLoading, messagesLength, onClear, onProfile, _t }: {
+export function Header({ tableName, isLoading, messagesLength, onClear, onProfile }: {
   tableName?: string | null
   isLoading: boolean
   messagesLength: number
   onClear: () => void
   onProfile: () => void
-  _t: (k: string) => string
 }) {
+  const { _t } = useLang()
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
 
   return (

@@ -93,10 +93,6 @@ export function SqlConsole({
 
   return (
     <div className="flex flex-col h-full">
-      <style>{`
-        .cm-editor { height: 100% !important; }
-        .cm-scroller { overflow: auto !important; }
-      `}</style>
       <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
         {isExecuting && onCancel ? (
           <button
@@ -148,7 +144,7 @@ export function SqlConsole({
           height="100%"
           basicSetup={{ lineNumbers: false, foldGutter: false, indentOnInput: true, autocompletion: true }}
           placeholder={_t("sql.placeholder")}
-          className="text-xs [&_.cm-editor]:h-full [&_.cm-content]:font-mono"
+          className="text-xs [&_.cm-editor]:h-full [&_.cm-content]:font-mono [&_.cm-scroller]:overflow-auto"
         />
       </div>
     </div>

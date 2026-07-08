@@ -1,6 +1,5 @@
 "use client"
 
-import { useLang } from "@/components/lang-provider"
 import { useAgentChat } from "@/hooks/use-agent-chat"
 import type { AssistantMessage } from "@/lib/agent-types"
 import { Header } from "./agent-chat/header"
@@ -16,22 +15,20 @@ interface AgentChatProps {
 }
 
 export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated }: AgentChatProps) {
-  const { _t, lang } = useLang()
-  const welcomeContent = _t("agent.welcome")
   const {
     messages, messageUI, input, isLoading, suggestions,
-    aiInitialQuestions, aiFollowUpQuestions,
-    isGeneratingInitialQuestions, isGeneratingFollowUpQuestions,
-    chatRef, abortRef,
+    aiInitialQuestions,
+    isGeneratingInitialQuestions,
+    chatRef, abortRef, chatKey,
     setInput, sendMessage, stopGeneration, clearConversation,
     generateProfile, toggleThinking, generateAiDirections, generateAiQuestions,
   } = useAgentChat({
-    tableName, schema, selectedDatabase, onSqlGenerated, lang, welcomeContent, _t,
+    tableName, schema, selectedDatabase, onSqlGenerated,
   })
 
   return (
     <div className="flex flex-col h-full">
-      <Header tableName={tableName} isLoading={isLoading} messagesLength={messages.length} onClear={clearConversation} onProfile={generateProfile} _t={_t} />
+      <Header tableName={tableName} isLoading={isLoading} messagesLength={messages.length} onClear={clearConversation} onProfile={generateProfile} />
       <div className="flex-1 overflow-auto p-2 space-y-3" ref={chatRef}>
         {messages.map((msg, i) => (
           <div key={i} className={`text-xs animate-fade-slide-in ${msg.role === "user" ? "text-right" : "text-left"}`}>
@@ -39,10 +36,8 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
               <div className="inline-block bg-primary/10 text-foreground rounded-lg px-3 py-1.5 max-w-[85%] text-left">{msg.content}</div>
             ) : (
               <AssistantMessageView
-                msg={msg as AssistantMessage} index={i} messagesLength={messages.length} ui={messageUI.get(i)}
-                isLoading={isLoading} schema={schema} lang={lang} _t={_t} messages={messages}
-                aiFollowUpQuestions={aiFollowUpQuestions}
-                isGeneratingFollowUpQuestions={isGeneratingFollowUpQuestions}
+                msg={msg as AssistantMessage} index={i} messagesLength={messages.length} ui={messageUI[i]}
+                schema={schema} chatKey={chatKey}
                 onToggleThinking={toggleThinking}
                 onGenerateAiDirections={generateAiDirections} onGenerateAiQuestions={generateAiQuestions}
                 onSendMessage={sendMessage}
@@ -50,9 +45,9 @@ export function AgentChat({ tableName, schema, selectedDatabase, onSqlGenerated 
             )}
           </div>
         ))}
-        <InitialSuggestions isLoading={isLoading} messagesLength={messages.length} tableName={tableName} suggestions={suggestions} aiInitialQuestions={aiInitialQuestions} isGeneratingInitialQuestions={isGeneratingInitialQuestions} onSend={sendMessage} onGenerateAiQuestions={generateAiQuestions} _t={_t} lang={lang} />
+        <InitialSuggestions isLoading={isLoading} messagesLength={messages.length} tableName={tableName} suggestions={suggestions} aiInitialQuestions={aiInitialQuestions} isGeneratingInitialQuestions={isGeneratingInitialQuestions} onSend={(text: string) => sendMessage(text)} onGenerateAiQuestions={generateAiQuestions} />
       </div>
-      <InputBar input={input} isLoading={isLoading} onInputChange={setInput} onSend={sendMessage} onStop={stopGeneration} _t={_t} lang={lang} />
+      <InputBar input={input} isLoading={isLoading} onInputChange={setInput} onSend={(text: string) => sendMessage(text)} onStop={stopGeneration} />
     </div>
   )
 }

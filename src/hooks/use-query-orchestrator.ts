@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { useDatasetStore } from "@/stores/dataset"
 import { useSqlHistoryStore } from "@/stores/sql-history"
-import { usePivotStore } from "@/stores/pivot"
+import { resetAllPivot } from "@/stores/pivot-facade"
 import { useData } from "@/components/data-provider"
 import { pageData } from "@/lib/catalog"
 import type { QueryLifecycleState } from "@/lib/query-lifecycle"
@@ -24,9 +24,10 @@ const initialState: QueryLifecycleState = {
   pendingAutoExecute: null,
 }
 
-export function useQueryOrchestrator() {
-  const { catalog, queryEngine, queryLifecycle } = useData()
+/* ── 1. useSchema ── */
 
+export function useSchema() {
+  const { catalog } = useData()
   const { selectedTable, selectedDatabase } = useDatasetStore(useShallow((s) => ({
     selectedTable: s.selectedTable,
     selectedDatabase: s.selectedDatabase,
@@ -42,17 +43,22 @@ export function useQueryOrchestrator() {
     if (!selectedDatabase || !selectedTable) return EMPTY_SCHEMA
     const page = catalog.getSchema(selectedDatabase, selectedTable)
     return pageData(page) ?? EMPTY_SCHEMA
+    // catalogVersion is a signal dep: triggers recompute on catalog cache invalidation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDatabase, selectedTable, catalog, catalogVersion])
 
-  const state = useSyncExternalStore(
-    (cb) => queryLifecycle.subscribe(cb),
-    () => queryLifecycle.state,
-    () => initialState
-  )
+  return schema
+}
 
-  const addEntry = useSqlHistoryStore((s) => s.addEntry)
-  const resetPivot = usePivotStore((s) => s.reset)
+/* ── 2. useQueryController ── */
 
+export function useQueryController() {
+  const { queryLifecycle } = useData()
+  const schema = useSchema()
+  const { selectedTable, selectedDatabase } = useDatasetStore(useShallow((s) => ({
+    selectedTable: s.selectedTable,
+    selectedDatabase: s.selectedDatabase,
+  })))
   useEffect(() => {
     queryLifecycle.setCurrentSchema(schema)
   }, [schema, queryLifecycle])
@@ -64,8 +70,49 @@ export function useQueryOrchestrator() {
   }, [selectedTable, selectedDatabase, queryLifecycle, schema])
 
   useEffect(() => {
-    resetPivot()
-  }, [selectedTable, selectedDatabase, resetPivot])
+    resetAllPivot()
+  }, [selectedTable, selectedDatabase])
+}
+
+/* ── 3. useQueryState ── */
+
+export function useQueryState() {
+  const { queryLifecycle } = useData()
+
+  const state = useSyncExternalStore(
+    (cb) => queryLifecycle.subscribe(cb),
+    () => queryLifecycle.state,
+    () => initialState
+  )
+
+  const data = useMemo(() => {
+    if (!state.data) return null
+    const filtered = queryLifecycle.getFilteredRows()
+    return { ...state.data, rows: filtered }
+  }, [state.data, state.searchQuery, queryLifecycle])
+
+  return {
+    data,
+    isExecuting: state.status === "executing",
+    error: state.error,
+    sort: state.sort,
+    searchQuery: state.searchQuery,
+    sql: state.sql,
+    pendingAutoExecute: state.pendingAutoExecute,
+    loadedRows: state.loadedRows,
+  }
+}
+
+/* ── 4. useQueryActions ── */
+
+export function useQueryActions() {
+  const { queryEngine, queryLifecycle } = useData()
+  const { selectedTable, selectedDatabase } = useDatasetStore(useShallow((s) => ({
+    selectedTable: s.selectedTable,
+    selectedDatabase: s.selectedDatabase,
+  })))
+  const schema = useSchema()
+  const addEntry = useSqlHistoryStore((s) => s.addEntry)
 
   const handleSort = useCallback(
     (column: string) => {
@@ -129,28 +176,18 @@ export function useQueryOrchestrator() {
     [queryLifecycle]
   )
 
-  const filteredRows = queryLifecycle.getFilteredRows()
-
   return {
-    selectedTable,
-    schema,
-    selectedDatabase,
-    data: state.data ? { ...state.data, rows: filteredRows } : null,
-    isExecuting: state.status === "executing",
-    error: state.error,
-    sort: state.sort,
-    searchQuery: state.searchQuery,
-    sql: state.sql,
-    pendingAutoExecute: state.pendingAutoExecute,
-    loadedRows: state.loadedRows,
-    executeQuery: (sql: string, tableName: string) => queryLifecycle.execute(sql, tableName),
-    setSort: (sort: { column: string | null; direction: "asc" | "desc" | null }) => queryLifecycle.setSort(sort),
-    setSearchQuery,
-    setPendingAutoExecute: (sql: string | null) => queryLifecycle.setPendingAutoExecute(sql),
-    loadMore,
-    cancel,
     handleSort,
     handleSqlExecute,
     handleDrilldown,
+    setSearchQuery,
+    loadMore,
+    cancel,
+    executeQuery: (sql: string, tableName: string) => queryLifecycle.execute(sql, tableName),
+    setSort: (sort: { column: string | null; direction: "asc" | "desc" | null }) => queryLifecycle.setSort(sort),
+    setSql: (sql: string) => queryLifecycle.setSql(sql),
+    setPendingAutoExecute: (sql: string | null) => queryLifecycle.setPendingAutoExecute(sql),
   }
 }
+
+

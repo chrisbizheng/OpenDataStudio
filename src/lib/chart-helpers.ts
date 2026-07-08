@@ -223,8 +223,7 @@ export function buildEChartsOption(params: ChartPreparedData & {
     if (axisExtras.radiusAxis) opt.radiusAxis = axisExtras.radiusAxis
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  opt.series = series as any
+  opt.series = series as unknown as EChartsOption["series"]
 
   if (needsXY && yKey) {
     markMax(opt, stats.maxItem, resolvedXKey, yKey, resolvedType)

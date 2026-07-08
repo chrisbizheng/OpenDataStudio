@@ -1,4 +1,3 @@
-import type { HistoryStoreState } from "./history-store-factory"
 import { createHistoryStore } from "./history-store-factory"
 
 export interface SqlHistoryEntry {

@@ -12,33 +12,26 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core"
 import { useShallow } from "zustand/react/shallow"
-import { useTheme } from "@/components/theme-provider"
-import { useLang } from "@/components/lang-provider"
-import { DataGrid } from "@/components/data-grid"
 import { PivotConfigPanel } from "@/components/pivot-config"
 import { PivotGrid } from "@/components/pivot-grid"
-import { usePivotStore } from "@/stores/pivot"
+import { DrilldownDrawer } from "@/components/drilldown-drawer"
+import { usePivotExecutionStore } from "@/stores/pivot-execution"
 import { usePivotOrchestrator } from "@/hooks/use-pivot-orchestrator"
 import { SqlPreviewDialog } from "@/components/sql-preview-dialog"
 import type { PivotDragItem } from "@/lib/pivot-dnd"
 import type { PivotDropZone } from "@/lib/pivot-dnd"
-import type { ColumnMeta } from "@/lib/types"
+import type { TableRef } from "@/lib/types"
 
 interface PivotViewProps {
-  schema: ColumnMeta[]
-  selectedTable: string
-  selectedDatabase: string
+  tableRef: TableRef
   onDrilldown: (params: { dimensionValues: Record<string, unknown>; indicatorKey: string }) => Promise<{ columns: string[]; rows: unknown[][]; isLoading: boolean }>
 }
 
 export function PivotView({
-  schema,
-  selectedTable,
-  selectedDatabase,
+  tableRef,
   onDrilldown,
 }: PivotViewProps) {
-  const { resolved } = useTheme()
-
+  const { schema, tableName: selectedTable, database: selectedDatabase } = tableRef
   const [activeDragItem, setActiveDragItem] = useState<PivotDragItem | null>(null)
   const [showSqlPreview, setShowSqlPreview] = useState(false)
   const [previewSql, setPreviewSql] = useState("")
@@ -53,7 +46,7 @@ export function PivotView({
     useSensor(KeyboardSensor)
   )
 
-  const pivotStore = usePivotStore(useShallow((s) => ({
+  const pivotStore = usePivotExecutionStore(useShallow((s) => ({
     resultData: s.resultData,
     error: s.error,
     lastSQL: s.lastSQL,
@@ -63,9 +56,7 @@ export function PivotView({
     pivotConfig,
     generateSQL,
     resolveDragDrop,
-  } = usePivotOrchestrator(schema, selectedTable, selectedDatabase)
-
-  const handlePivotExecute = useCallback(() => {}, [])
+  } = usePivotOrchestrator(tableRef)
 
   const handleViewSql = useCallback(() => {
     const sql = generateSQL()
@@ -112,10 +103,7 @@ export function PivotView({
       <div className="flex-1 flex gap-2 overflow-hidden">
         <div className="w-80 shrink-0 border border-border rounded-md overflow-hidden">
           <PivotConfigPanel
-            schema={schema}
-            tableName={selectedTable}
-            database={selectedDatabase}
-            onExecute={handlePivotExecute}
+            tableRef={tableRef}
             onViewSql={handleViewSql}
           />
         </div>
@@ -128,7 +116,6 @@ export function PivotView({
           <div className="flex-1 overflow-hidden">
             {selectedTable && selectedDatabase ? (
               <PivotGrid
-                key={resolved}
                 config={pivotConfig}
                 data={pivotStore.resultData ?? { columns: [], rows: [] }}
                 schema={schema}
@@ -145,7 +132,6 @@ export function PivotView({
             <DrilldownDrawer
               data={drilldownData}
               schema={schema}
-              selectedTable={selectedTable}
               onClose={() => setDrilldownData(null)}
             />
           )}
@@ -164,53 +150,5 @@ export function PivotView({
         onClose={() => setShowSqlPreview(false)}
       />
     </DndContext>
-  )
-}
-
-function DrilldownDrawer({
-  data,
-  schema,
-  selectedTable,
-  onClose,
-}: {
-  data: { columns: string[]; rows: unknown[][]; isLoading: boolean }
-  schema: ColumnMeta[]
-  selectedTable: string
-  onClose: () => void
-}) {
-  const { _t } = useLang()
-
-  return (
-    <div className="shrink-0 max-h-[40%] border-t border-border mt-1 pt-1 overflow-hidden flex flex-col">
-      <div className="flex items-center gap-2 mb-1 shrink-0">
-        <span className="text-xs font-semibold">{_t("pivot.drilldown")}</span>
-        {!data.isLoading && (
-          <span className="text-[10px] text-muted-foreground">
-            {data.rows.length} 行
-          </span>
-        )}
-        <div className="flex-1" />
-        <button
-          onClick={onClose}
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          ×
-        </button>
-      </div>
-      {data.isLoading ? (
-        <div className="flex items-center justify-center py-4">
-          <span className="inline-block w-3 h-3 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-        </div>
-      ) : (
-        <div className="flex-1 overflow-auto">
-          <DataGrid
-            columns={data.columns}
-            rows={data.rows}
-            schema={schema}
-            selectedTable={selectedTable}
-          />
-        </div>
-      )}
-    </div>
   )
 }

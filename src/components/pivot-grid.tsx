@@ -112,16 +112,16 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
                 ? {
                     showGrandTotals: config.totals.row.showGrandTotals,
                     showSubTotals: config.totals.row.showSubTotals,
-                    grandTotalLabel: "总计",
-                    subTotalLabel: "小计",
+                    grandTotalLabel: _t("pivot.grand_total_label"),
+                    subTotalLabel: _t("pivot.subtotal_label"),
                   }
                 : undefined,
               column: config.totals.column
                 ? {
                     showGrandTotals: config.totals.column.showGrandTotals,
                     showSubTotals: config.totals.column.showSubTotals,
-                    grandTotalLabel: "总计",
-                    subTotalLabel: "小计",
+                    grandTotalLabel: _t("pivot.grand_total_label"),
+                    subTotalLabel: _t("pivot.subtotal_label"),
                   }
                 : undefined,
             }
@@ -216,7 +216,7 @@ export function PivotGrid({ config, data, schema, hasExecuted, onCellClick }: Pi
   if (data.rows.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-        {hasExecuted ? _t("grid.no_rows") : "配置维度和指标后点击\"执行\""}
+        {hasExecuted ? _t("grid.no_rows") : _t("pivot.no_config_yet")}
       </div>
     )
   }

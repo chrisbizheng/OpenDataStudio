@@ -94,22 +94,30 @@ describe("CatalogImpl", () => {
     })
 
     it("失败时设置错误状态，保留 stale 数据", async () => {
-      await catalog.loadTables("analytics")
-      const failCatalog = createCatalog({
-        ...{ databases: defaultDatabases, tables: defaultTables, schema: defaultSchema },
-        failOn: { resource: "tables", key: "analytics" },
-      })
-      await failCatalog.loadTables("analytics")
-      failCatalog.invalidate({ kind: "database", database: "analytics" })
+      // 用可变 port：先成功加载建立 stale 数据，再切换为失败
       const port = new MemoryCatalogPort({
         databases: defaultDatabases,
-        failOn: { resource: "tables", key: "analytics" },
+        tables: defaultTables,
+        schema: defaultSchema,
       })
-      const failCat = new CatalogImpl(port)
-      await failCat.loadTables("analytics")
-      await expect(failCat.loadTables("analytics")).rejects.toThrow()
-      const page = failCat.getTables("analytics")
+      const cat = new CatalogImpl(port)
+
+      // 1. 成功加载 → 缓存 ok
+      await cat.loadTables("analytics")
+      expect(cat.getTables("analytics").status).toBe("ok")
+
+      // 2. 切换 port 为失败
+      port.update({ failOn: { resource: "tables", key: "analytics" } })
+
+      // 3. 重新加载 → 抛错 + 设置 error 状态 + 保留 stale 数据
+      await expect(cat.loadTables("analytics")).rejects.toThrow("injected failure")
+
+      const page = cat.getTables("analytics")
       expect(page.status).toBe("error")
+      if (page.status === "error") {
+        expect(page.stale).toHaveLength(2)
+        expect(page.stale?.[0].name).toBe("sales")
+      }
     })
 
     it("不同数据库独立缓存", async () => {

@@ -50,7 +50,7 @@ export function AxisTab({ local, updateAxis }: TabSharedProps) {
           </div>
           <div>
             <Label className="text-sm font-medium">{_t("chart_y_axis_unit")}</Label>
-            <Input value={local.axis?.yAxisUnit ?? ""} onChange={(e) => updateAxis("yAxisUnit", e.target.value || undefined)} className="mt-1.5 h-9 text-sm" placeholder="万元, %" />
+            <Input value={local.axis?.yAxisUnit ?? ""} onChange={(e) => updateAxis("yAxisUnit", e.target.value || undefined)} className="mt-1.5 h-9 text-sm" placeholder={_t("widget.y_axis_unit_placeholder")} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

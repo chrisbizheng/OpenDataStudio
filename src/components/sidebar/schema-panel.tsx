@@ -89,7 +89,7 @@ export function SchemaPanel({
               <span>·</span>
               <span className="font-mono shrink-0">{tableMeta.engine}</span>
               <span>·</span>
-              <span className="shrink-0">{formatRowCount(tableMeta.rowCount)}行</span>
+              <span className="shrink-0">{formatRowCount(tableMeta.rowCount)}{_t("grid.rows")}</span>
             </div>
             {tableMeta.comment && (
               <div className="text-[10px] text-muted-foreground/70 italic leading-tight px-3 py-1 border-b border-border/30" title={tableMeta.comment}>

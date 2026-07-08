@@ -5,6 +5,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { renderValue } from "./column-renderer"
 import { useLang } from "@/components/lang-provider"
 import { formatType } from "@/lib/column-type-classifier"
+import { computeColumnWidths } from "@/lib/data-grid-utils"
 import { SearchBar } from "@/components/search-bar"
 import type { ColumnMeta } from "@/lib/types"
 
@@ -12,7 +13,6 @@ interface DataGridProps {
   columns: string[]
   rows: unknown[][]
   schema: ColumnMeta[]
-  selectedTable: string
   sortColumn?: string | null
   sortDirection?: "asc" | "desc" | null
   onSort?: (column: string) => void
@@ -26,6 +26,25 @@ interface DataGridProps {
 }
 
 const ROW_HEIGHT = 32
+
+function DataGridToolbar({
+  searchQuery,
+  onSearchChange,
+  _t,
+}: {
+  searchQuery?: string
+  onSearchChange?: (q: string) => void
+  _t: (key: string) => string
+}) {
+  return (
+    <div className="flex items-center gap-2 shrink-0">
+      <SearchBar value={searchQuery} onChange={onSearchChange} />
+      {onSearchChange && (
+        <span className="text-[10px] text-muted-foreground shrink-0" title={_t("grid.window_search")}>{_t("grid.window_search")}</span>
+      )}
+    </div>
+  )
+}
 
 export function DataGrid({
   columns,
@@ -54,26 +73,7 @@ export function DataGrid({
     })
   }, [columns, schema])
 
-  const colWidths = useMemo(() => {
-    const widths: number[] = [28]
-    const sample = rows.slice(0, 100)
-    for (let i = 0; i < columns.length; i++) {
-      const colMeta = gridColumns[i]
-      let maxDataLen = 0
-      for (const row of sample) {
-        const str = row[i] != null ? String(row[i]) : ""
-        maxDataLen = Math.max(maxDataLen, str.length)
-      }
-      const nameW = textWidth(columns[i])
-      const typeW = colMeta.type ? textWidth(formatType(colMeta.type)) : 0
-      const commentW = colMeta?.comment ? textWidth(colMeta.comment) : 0
-      const headerW = Math.max(nameW, typeW, commentW)
-      const dataW = maxDataLen * 7.5 + 16
-      const width = Math.min(300, Math.max(64, Math.max(headerW, dataW)))
-      widths.push(Math.ceil(width))
-    }
-    return widths
-  }, [columns, rows, gridColumns])
+  const colWidths = useMemo(() => computeColumnWidths(columns, rows, gridColumns), [columns, rows, gridColumns])
 
   const colStyle = useCallback(
     (idx: number): React.CSSProperties => {
@@ -104,12 +104,7 @@ export function DataGrid({
     const hasSearch = !!searchQuery && searchQuery.trim().length > 0
     return (
       <div className="flex flex-col h-full">
-        <div className="flex items-center gap-2 shrink-0">
-          <SearchBar value={searchQuery} onChange={onSearchChange} />
-          {onSearchChange && (
-            <span className="text-[10px] text-muted-foreground shrink-0" title={_t("grid.window_search")}>{_t("grid.window_search")}</span>
-          )}
-        </div>
+        <DataGridToolbar searchQuery={searchQuery} onSearchChange={onSearchChange} _t={_t} />
           <div className="flex flex-col items-center justify-center flex-1 text-sm text-muted-foreground gap-2">
             <span>{hasSearch ? _t("grid.no_search_results") : _t("grid.no_rows")}</span>
             {hasSearch && onSearchChange && (
@@ -128,10 +123,7 @@ export function DataGrid({
   return (
     <div className="flex flex-col h-full gap-2">
       <div className="flex items-center gap-2 shrink-0">
-        <SearchBar value={searchQuery} onChange={onSearchChange} />
-        {onSearchChange && (
-          <span className="text-[10px] text-muted-foreground shrink-0" title={_t("grid.window_search")}>{_t("grid.window_search")}</span>
-        )}
+        <DataGridToolbar searchQuery={searchQuery} onSearchChange={onSearchChange} _t={_t} />
         {loadedRows !== undefined && (
           <span className="text-xs text-muted-foreground tabular-nums shrink-0">
             {rows.length} {_t("grid.rows")}
@@ -277,10 +269,4 @@ export function DataGrid({
   )
 }
 
-function textWidth(s: string): number {
-  let w = 0
-  for (const ch of s) {
-    w += ch.charCodeAt(0) > 127 ? 12 : 8.5
-  }
-  return w + 24
-}
+

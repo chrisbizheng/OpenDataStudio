@@ -1,57 +1,27 @@
 "use client"
 
 import { useCallback, useState, useEffect, startTransition } from "react"
+import { useShallow } from "zustand/react/shallow"
 import { DataGrid } from "@/components/data-grid"
 import { SqlConsole } from "@/components/sql-console"
 import { QueryPanels } from "@/components/query-panels"
 import { exportData } from "@/lib/export"
 import { useSavedQueriesStore } from "@/stores/saved-queries"
 import { useLang } from "@/components/lang-provider"
-import type { ColumnMeta } from "@/lib/types"
-import type { TableData } from "@/lib/query-lifecycle"
+import { useDatasetStore } from "@/stores/dataset"
+import { useQueryState, useQueryActions, useSchema } from "@/hooks/use-query-orchestrator"
 
-interface GridViewProps {
-  data: TableData | null
-  isExecuting: boolean
-  error: string | null
-  schema: ColumnMeta[]
-  selectedTable: string | null
-  selectedDatabase: string | null
-  sort: { column: string | null; direction: "asc" | "desc" | null }
-  searchQuery: string
-  sql: string
-  pendingAutoExecute: string | null
-  loadedRows: number
-  onSort: (column: string) => void
-  onSearchChange: (query: string) => void
-  onLoadMore: () => void
-  onExecuteSql: (sql: string) => void
-  onCancel?: () => void
-  onSqlGenerated: (sql: string) => void
-  onSetPendingAutoExecute: (sql: string | null) => void
-}
-
-export function GridView({
-  data,
-  isExecuting,
-  error,
-  schema,
-  selectedTable,
-  selectedDatabase,
-  sort,
-  searchQuery,
-  sql,
-  pendingAutoExecute,
-  loadedRows,
-  onSort,
-  onSearchChange,
-  onLoadMore,
-  onExecuteSql,
-  onCancel,
-  onSqlGenerated,
-  onSetPendingAutoExecute,
-}: GridViewProps) {
+export function GridView() {
   const { _t } = useLang()
+
+  const { data, isExecuting, error, sort, searchQuery, sql, pendingAutoExecute, loadedRows } = useQueryState()
+  const { handleSort, setSearchQuery, loadMore, handleSqlExecute, cancel, setPendingAutoExecute } = useQueryActions()
+  const schema = useSchema()
+  const { selectedTable, selectedDatabase } = useDatasetStore(useShallow((s) => ({
+    selectedTable: s.selectedTable,
+    selectedDatabase: s.selectedDatabase,
+  })))
+
   const [sqlText, setSqlText] = useState("")
 
   useEffect(() => {
@@ -59,10 +29,10 @@ export function GridView({
   }, [sql])
   useEffect(() => {
     if (pendingAutoExecute) {
-      onExecuteSql(pendingAutoExecute)
-      onSetPendingAutoExecute(null)
+      handleSqlExecute(pendingAutoExecute)
+      setPendingAutoExecute(null)
     }
-  }, [pendingAutoExecute, onExecuteSql, onSetPendingAutoExecute])
+  }, [pendingAutoExecute, handleSqlExecute, setPendingAutoExecute])
 
   const handleCopyCsv = useCallback(() => {
     if (!data || !selectedTable) return
@@ -73,14 +43,6 @@ export function GridView({
     if (!data || !selectedTable) return
     exportData(selectedTable, loadedRows, data.columns, data.rows, "json")
   }, [data, selectedTable, loadedRows])
-
-  const handleSqlGenerated = useCallback(
-    (sql: string) => {
-      setSqlText(sql)
-      onSqlGenerated(sql)
-    },
-    [onSqlGenerated]
-  )
 
   const addSavedQuery = useSavedQueriesStore((s) => s.add)
 
@@ -107,8 +69,8 @@ export function GridView({
         <SqlConsole
           sql={sqlText}
           onSqlChange={setSqlText}
-          onExecute={onExecuteSql}
-          onCancel={onCancel}
+          onExecute={handleSqlExecute}
+          onCancel={cancel}
           onSave={handleSave}
           isExecuting={isExecuting}
           tableName={selectedTable}
@@ -129,14 +91,13 @@ export function GridView({
             columns={data.columns}
             rows={data.rows}
             schema={schema}
-            selectedTable={selectedTable ?? ""}
             sortColumn={sort.column}
             sortDirection={sort.direction}
-            onSort={onSort}
+            onSort={handleSort}
             searchQuery={searchQuery}
-            onSearchChange={onSearchChange}
+            onSearchChange={setSearchQuery}
             loadedRows={loadedRows}
-            onLoadMore={onLoadMore}
+            onLoadMore={loadMore}
             isLoading={isExecuting}
             onDownloadCsv={handleCopyCsv}
             onDownloadJson={handleCopyJson}

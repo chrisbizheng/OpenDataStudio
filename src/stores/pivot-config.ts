@@ -1,7 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { type PivotConfig, type PivotIndicator, type CalculatedIndicator, type FilterRule, type SortRule, type TotalsConfig } from "@/lib/pivot-sql"
-import { validate } from "@/lib/calculated-indicator-expression"
 import { migratePivotPersisted } from "./migrate-pivot-store"
 
 export interface PivotResult {
@@ -9,7 +8,7 @@ export interface PivotResult {
   rows: unknown[][]
 }
 
-interface PivotState {
+interface PivotConfigState {
   rows: string[]
   columns: string[]
   indicators: PivotIndicator[]
@@ -17,10 +16,6 @@ interface PivotState {
   filters: FilterRule[]
   sort: SortRule | null
   totals: TotalsConfig
-  resultData: PivotResult | null
-  isExecuting: boolean
-  error: string | null
-  lastSQL: string | null
 
   addRow: (field: string) => void
   removeRow: (field: string) => void
@@ -38,10 +33,6 @@ interface PivotState {
   removeFilter: (field: string) => void
   setSort: (sort: SortRule | null) => void
   setTotals: (totals: TotalsConfig) => void
-  setResultData: (data: PivotResult | null) => void
-  setExecuting: (v: boolean) => void
-  setError: (error: string | null) => void
-  setLastSQL: (sql: string | null) => void
   reset: () => void
   loadConfig: (config: PivotConfig) => void
   getPivotConfig: () => PivotConfig
@@ -60,10 +51,6 @@ const initialState = {
   filters: [] as FilterRule[],
   sort: null as SortRule | null,
   totals: defaultTotals,
-  resultData: null as PivotResult | null,
-  isExecuting: false,
-  error: null as string | null,
-  lastSQL: null as string | null,
 }
 
 export interface PivotConfigSource {
@@ -105,7 +92,7 @@ export function buildPivotConfig(state: PivotConfigSource): PivotConfig {
   }
 }
 
-export const usePivotStore = create<PivotState>()(
+export const usePivotConfigStore = create<PivotConfigState>()(
   persist(
     (set, get) => ({
       ...initialState,
@@ -144,18 +131,8 @@ export const usePivotStore = create<PivotState>()(
         })),
 
       addCalculatedIndicator: (indicator) => {
-        const allKeys = [
-          ...get().indicators.map((i) => i.key),
-          ...get().calculatedIndicators.map((c) => c.key),
-        ]
-        const validation = validate(indicator.logic, allKeys)
-        if (!validation.valid) {
-          set({ error: validation.errors.join("; ") })
-          return
-        }
         set((s) => ({
           calculatedIndicators: [...s.calculatedIndicators, indicator],
-          error: null,
         }))
       },
 
@@ -193,10 +170,6 @@ export const usePivotStore = create<PivotState>()(
         })),
       setSort: (sort) => set({ sort }),
       setTotals: (totals) => set({ totals }),
-      setResultData: (data) => set({ resultData: data }),
-      setExecuting: (v) => set({ isExecuting: v }),
-      setError: (error) => set({ error }),
-      setLastSQL: (sql) => set({ lastSQL: sql }),
 
       getPivotConfig: () => buildPivotConfig(get()),
 
@@ -211,9 +184,6 @@ export const usePivotStore = create<PivotState>()(
           filters: config.filters ?? [],
           sort: config.sort ?? null,
           totals: config.totals ?? defaultTotals,
-          resultData: null,
-          error: null,
-          lastSQL: null,
         }),
     }),
     {

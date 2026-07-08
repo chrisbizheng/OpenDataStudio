@@ -1,8 +1,10 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { useLlmStore } from "@/stores/llm-config"
 import { useChartDetailStore } from "@/stores/chart-detail"
+import { useLang } from "@/components/lang-provider"
+import { useAgentChatSessionStore } from "@/stores/agent-chat-session"
 import { suggestQuestions } from "@/lib/suggestions"
 import { buildLlmHeaders } from "@/lib/llm-client"
 import { getTraceId } from "@/lib/client-logger"
@@ -85,27 +87,32 @@ async function fetchAgentQuestions(
 }
 
 interface UseAiSuggestionsParams {
+  chatKey: string
   tableName?: string | null
   schema?: { name: string; type: string; comment?: string }[]
   selectedDatabase?: string | null
-  lang: "zh" | "en"
 }
 
 export function useAiSuggestions({
+  chatKey,
   tableName,
   schema,
   selectedDatabase,
-  lang,
 }: UseAiSuggestionsParams) {
+  const { lang } = useLang()
   const llmConfig = useLlmStore((s) => s.config)
   const suggestions = schema && schema.length > 0 ? suggestQuestions(schema, lang) : []
 
   const setAiDirections = useChartDetailStore((s) => s.setAiDirections)
   const setGeneratingDirections = useChartDetailStore((s) => s.setGeneratingDirections)
-  const [aiInitialQuestions, setAiInitialQuestions] = useState<string[] | null>(null)
-  const [aiFollowUpQuestions, setAiFollowUpQuestions] = useState<string[] | null>(null)
-  const [isGeneratingInitialQuestions, setIsGeneratingInitialQuestions] = useState(false)
-  const [isGeneratingFollowUpQuestions, setIsGeneratingFollowUpQuestions] = useState(false)
+  const aiInitialQuestions = useAgentChatSessionStore((s) => s.sessions[chatKey]?.aiInitialQuestions ?? null)
+  const aiFollowUpQuestions = useAgentChatSessionStore((s) => s.sessions[chatKey]?.aiFollowUpQuestions ?? null)
+  const isGeneratingInitialQuestions = useAgentChatSessionStore((s) => s.sessions[chatKey]?.isGeneratingInitialQuestions ?? false)
+  const isGeneratingFollowUpQuestions = useAgentChatSessionStore((s) => s.sessions[chatKey]?.isGeneratingFollowUpQuestions ?? false)
+  const setAiInitialQuestions = useAgentChatSessionStore((s) => s.setAiInitialQuestions)
+  const setAiFollowUpQuestions = useAgentChatSessionStore((s) => s.setAiFollowUpQuestions)
+  const setIsGeneratingInitialQuestions = useAgentChatSessionStore((s) => s.setIsGeneratingInitialQuestions)
+  const setIsGeneratingFollowUpQuestions = useAgentChatSessionStore((s) => s.setIsGeneratingFollowUpQuestions)
 
   const generateAiDirections = useCallback(async (
     msg: AssistantMessage,
@@ -144,7 +151,7 @@ export function useAiSuggestions({
   }) => {
     const setLoading = input.target === "initial" ? setIsGeneratingInitialQuestions : setIsGeneratingFollowUpQuestions
     const setQuestions = input.target === "initial" ? setAiInitialQuestions : setAiFollowUpQuestions
-    setLoading(true)
+    setLoading(chatKey, true)
     try {
       if (!llmConfig.apiKey) return
       const questions = await fetchAgentQuestions(llmConfig, {
@@ -155,16 +162,16 @@ export function useAiSuggestions({
         columns: input.columns,
         lang,
       })
-      if (questions.length) setQuestions(questions)
+      if (questions.length) setQuestions(chatKey, questions)
     } finally {
-      setLoading(false)
+      setLoading(chatKey, false)
     }
-  }, [llmConfig, tableName, schema, selectedDatabase, lang])
+  }, [llmConfig, tableName, schema, selectedDatabase, lang, chatKey])
 
   const clearSuggestions = useCallback(() => {
-    setAiInitialQuestions(null)
-    setAiFollowUpQuestions(null)
-  }, [])
+    setAiInitialQuestions(chatKey, null)
+    setAiFollowUpQuestions(chatKey, null)
+  }, [chatKey])
 
   return {
     suggestions,

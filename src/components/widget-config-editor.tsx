@@ -76,7 +76,7 @@ export function WidgetConfigEditor({
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen && hasUnsavedChanges) {
-      const confirmed = window.confirm("您有未保存的更改，确定要关闭吗？")
+      const confirmed = window.confirm(_t("widget.unsaved_changes_confirm"))
       if (!confirmed) return
     }
     onOpenChange(nextOpen)

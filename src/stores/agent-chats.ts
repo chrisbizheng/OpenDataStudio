@@ -4,7 +4,6 @@ import type { Message } from "@/lib/agent-types"
 
 interface AgentChatsState {
   conversations: Record<string, Message[]>
-  getConversation: (key: string) => Message[] | undefined
   setConversation: (key: string, messages: Message[]) => void
   clearConversation: (key: string) => void
   clearAll: () => void
@@ -12,9 +11,8 @@ interface AgentChatsState {
 
 export const useAgentChatsStore = create<AgentChatsState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       conversations: {},
-      getConversation: (key) => get().conversations[key],
       setConversation: (key, messages) =>
         set((s) => ({
           conversations: { ...s.conversations, [key]: messages },

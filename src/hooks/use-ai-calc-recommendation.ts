@@ -5,15 +5,13 @@ import { useLlmStore } from "@/stores/llm-config"
 import { buildLlmHeaders } from "@/lib/llm-client"
 import { validate } from "@/lib/calculated-indicator-expression"
 import type { PivotIndicator } from "@/lib/pivot-sql"
-import type { ColumnMeta } from "@/lib/types"
+import type { TableRef } from "@/lib/types"
 import type { CalcRecommendation } from "@/lib/calc-recommendations"
 
 interface UseAiCalcRecommendationParams {
   lang: "zh" | "en"
   availableIndicators: PivotIndicator[]
-  schema: ColumnMeta[]
-  tableName: string
-  database: string
+  tableRef: TableRef
   allIndicatorKeys: string[]
   _t: (key: string) => string
 }
@@ -21,12 +19,11 @@ interface UseAiCalcRecommendationParams {
 export function useAiCalcRecommendation({
   lang,
   availableIndicators,
-  schema,
-  tableName,
-  database,
+  tableRef,
   allIndicatorKeys,
   _t,
 }: UseAiCalcRecommendationParams) {
+  const { schema, tableName, database } = tableRef
   const llmConfig = useLlmStore((s) => s.config)
   const [aiInput, setAiInput] = useState("")
   const [aiLoading, setAiLoading] = useState(false)

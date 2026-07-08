@@ -10,6 +10,7 @@ import { createWidget } from "@/lib/widget-creation-lifecycle"
 import { executeWidgetQuery } from "@/lib/widget-execution"
 import { type CachedQueryResult } from "@/lib/widget-cache"
 import { vscodeDark, vscodeLight } from "@/lib/vscode-theme-override"
+import { toast } from "sonner"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -56,6 +57,7 @@ export function CreateWidgetSqlDialog({
 
   const [sqlText, setSqlText] = useState("")
   const [running, setRunning] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [queryResult, setQueryResult] = useState<CachedQueryResult | null>(null)
 
@@ -97,19 +99,27 @@ export function CreateWidgetSqlDialog({
   const handleAddWidget = useCallback(async () => {
     if (!queryResult) return
 
-    await createWidget({
-      source: "sql-dialog",
-      sql: sqlText,
-      vizConfig,
-      dashboardId,
-      queryResult,
-    })
+    setAdding(true)
+    try {
+      await createWidget({
+        source: "sql-dialog",
+        sql: sqlText,
+        vizConfig,
+        dashboardId,
+        queryResult,
+      })
 
-    setSqlText("")
-    setQueryResult(null)
-    setError(null)
-    onOpenChange(false)
-  }, [queryResult, sqlText, vizConfig, dashboardId, onOpenChange])
+      setSqlText("")
+      setQueryResult(null)
+      setError(null)
+      onOpenChange(false)
+      toast.success(_t("dashboard.added_to"))
+    } catch (e) {
+      toast.error(`${_t("dashboard.add_failed")}: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setAdding(false)
+    }
+  }, [queryResult, sqlText, vizConfig, dashboardId, onOpenChange, _t])
 
   const handleClose = useCallback(() => {
     setSqlText("")
@@ -129,10 +139,6 @@ export function CreateWidgetSqlDialog({
         <div className="flex-1 min-h-0 flex flex-col gap-2">
           {/* SQL Editor */}
           <div className="shrink-0 border rounded-md overflow-hidden" style={{ height: "200px" }}>
-            <style>{`
-              .cm-editor { height: 100% !important; }
-              .cm-scroller { overflow: auto !important; }
-            `}</style>
             <div className="flex items-center gap-1 px-2 py-1 border-b border-border shrink-0 bg-muted/30">
               <Button
                 size="xs"
@@ -156,7 +162,7 @@ export function CreateWidgetSqlDialog({
               height="100%"
               basicSetup={{ lineNumbers: false, foldGutter: false, indentOnInput: true }}
               placeholder={_t("dashboard.enter_sql")}
-              className="text-xs [&_.cm-editor]:h-full [&_.cm-content]:font-mono"
+              className="text-xs [&_.cm-editor]:h-full [&_.cm-content]:font-mono [&_.cm-scroller]:overflow-auto"
             />
           </div>
 
@@ -174,7 +180,7 @@ export function CreateWidgetSqlDialog({
               {queryResult ? (
                 <div className="min-w-full">
                   <div className="text-xs font-medium px-3 py-1.5 bg-muted/30 border-b border-border sticky top-0">
-                    {_t("dashboard.query_result")} ({queryResult.rows.length} rows)
+                    {_t("dashboard.query_result")} ({queryResult.rows.length} {_t("grid.rows")})
                   </div>
                   <table className="w-full text-xs">
                     <thead>
@@ -207,7 +213,7 @@ export function CreateWidgetSqlDialog({
                   </table>
                   {queryResult.rows.length > 50 && (
                     <div className="text-xs text-muted-foreground px-3 py-1">
-                      Showing first 50 of {queryResult.rows.length} rows
+                      {_t("dashboard.showing_first_of")} {queryResult.rows.length} {_t("grid.rows")}
                     </div>
                   )}
                 </div>
@@ -377,7 +383,7 @@ export function CreateWidgetSqlDialog({
           <Button variant="outline" size="sm" onClick={handleClose}>
             {_t("dashboard.cancel")}
           </Button>
-          <Button size="sm" onClick={handleAddWidget} disabled={!queryResult}>
+          <Button size="sm" onClick={handleAddWidget} disabled={!queryResult || adding}>
             {_t("dashboard.add_to_dashboard")}
           </Button>
         </DialogFooter>

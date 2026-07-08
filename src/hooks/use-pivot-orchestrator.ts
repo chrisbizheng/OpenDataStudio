@@ -1,8 +1,9 @@
 import { useMemo, useCallback } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { usePivotStore, validatePivotExecution } from "@/stores/pivot"
+import { usePivotConfigStore, validatePivotExecution } from "@/stores/pivot-config"
 import { usePivotHistoryStore } from "@/stores/pivot-history"
-import { buildPivotConfig } from "@/stores/pivot"
+import { buildPivotConfig } from "@/stores/pivot-config"
+import { usePivotExecutionStore } from "@/stores/pivot-execution"
 import { useFieldRoleStore } from "@/stores/field-role"
 import { generatePivotSQL } from "@/lib/pivot-sql"
 import { buildNextPivotIndicator } from "@/lib/pivot-client-utils"
@@ -10,10 +11,11 @@ import { resolveFieldRole, classifyColumnType } from "@/lib/column-type-classifi
 import { resolveDrop, type PivotDragItem, type PivotDropZone } from "@/lib/pivot-dnd"
 import { runPivotExecution } from "@/lib/pivot-execution"
 import { useData } from "@/components/data-provider"
-import type { ColumnMeta } from "@/lib/types"
+import type { TableRef } from "@/lib/types"
 
-export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, database: string) {
-  const store = usePivotStore(useShallow((s) => ({
+export function usePivotOrchestrator(tableRef: TableRef) {
+  const { schema, tableName, database } = tableRef
+  const configState = usePivotConfigStore(useShallow((s) => ({
     rows: s.rows,
     columns: s.columns,
     indicators: s.indicators,
@@ -21,22 +23,22 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
     filters: s.filters,
     sort: s.sort,
     totals: s.totals,
-    isExecuting: s.isExecuting,
   })))
+  const isExecuting = usePivotExecutionStore((s) => s.isExecuting)
 
-  const addRow = usePivotStore((s) => s.addRow)
-  const addColumn = usePivotStore((s) => s.addColumn)
-  const addIndicator = usePivotStore((s) => s.addIndicator)
-  const addFilter = usePivotStore((s) => s.addFilter)
-  const setExecuting = usePivotStore((s) => s.setExecuting)
-  const setError = usePivotStore((s) => s.setError)
-  const setResultData = usePivotStore((s) => s.setResultData)
-  const setLastSQL = usePivotStore((s) => s.setLastSQL)
+  const addRow = usePivotConfigStore((s) => s.addRow)
+  const addColumn = usePivotConfigStore((s) => s.addColumn)
+  const addIndicator = usePivotConfigStore((s) => s.addIndicator)
+  const addFilter = usePivotConfigStore((s) => s.addFilter)
+  const setExecuting = usePivotExecutionStore((s) => s.setExecuting)
+  const setError = usePivotExecutionStore((s) => s.setError)
+  const setResultData = usePivotExecutionStore((s) => s.setResultData)
+  const setLastSQL = usePivotExecutionStore((s) => s.setLastSQL)
   const roleOverrides = useFieldRoleStore((s) => s.overrides)
   const { queryEngine } = useData()
   const { addEntry } = usePivotHistoryStore()
 
-  const pivotConfig = useMemo(() => buildPivotConfig(store), [store])
+  const pivotConfig = useMemo(() => buildPivotConfig(configState), [configState])
 
   const generateSQL = useCallback(() => {
     return generatePivotSQL(pivotConfig, tableName, database)
@@ -65,9 +67,9 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
   const addFieldAsIndicator = useCallback(
     (field: string) => {
       const meta = schema.find((s) => s.name === field)
-      addIndicator(buildNextPivotIndicator(field, meta?.comment || field, store.indicators, meta?.type))
+      addIndicator(buildNextPivotIndicator(field, meta?.comment || field, configState.indicators, meta?.type))
     },
-    [schema, addIndicator, store.indicators]
+    [schema, addIndicator, configState.indicators]
   )
 
   const resolveDragDrop = useCallback(
@@ -83,7 +85,7 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
   )
 
   const executePivot = useCallback(async () => {
-    const validationError = validatePivotExecution(store, tableName, database)
+    const validationError = validatePivotExecution(configState, tableName, database)
     if (validationError) {
       setError(validationError)
       return
@@ -120,7 +122,7 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
           break
       }
     }
-  }, [store, pivotConfig, tableName, database, queryEngine, setExecuting, setError, setResultData, setLastSQL, addEntry])
+  }, [configState, pivotConfig, tableName, database, queryEngine, setExecuting, setError, setResultData, setLastSQL, addEntry])
 
   const cancel = useCallback(() => {
     queryEngine.cancel()
@@ -128,7 +130,7 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
 
   return {
     pivotConfig,
-    store,
+    store: configState,
     addRow,
     addColumn,
     addIndicator,
@@ -139,7 +141,7 @@ export function usePivotOrchestrator(schema: ColumnMeta[], tableName: string, da
     addFieldAsIndicator,
     resolveDragDrop,
     executePivot,
-    isExecuting: store.isExecuting,
+    isExecuting,
     cancel,
   }
 }

@@ -1,14 +1,15 @@
 "use client"
 
-export function InputBar({ input, isLoading, onInputChange, onSend, onStop, _t, lang }: {
+import { useLang } from "@/components/lang-provider"
+
+export function InputBar({ input, isLoading, onInputChange, onSend, onStop }: {
   input: string
   isLoading: boolean
   onInputChange: (v: string) => void
   onSend: (text: string) => void
   onStop: () => void
-  _t: (k: string) => string
-  lang: "zh" | "en"
 }) {
+  const { _t } = useLang()
   return (
     <div className="border-t border-border p-2 shrink-0">
       <div className="flex gap-2">

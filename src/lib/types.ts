@@ -16,3 +16,9 @@ export interface QueryResult {
   rows: unknown[][]
   stats: { elapsed: number; rowsRead: number; bytesRead: number }
 }
+
+export interface TableRef {
+  schema: ColumnMeta[]
+  tableName: string
+  database: string
+}
