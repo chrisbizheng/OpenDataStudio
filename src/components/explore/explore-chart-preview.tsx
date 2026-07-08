@@ -224,7 +224,7 @@ export function ExploreChartPreview({
             <div>
               <Label className="text-[10px]">{_t("dashboard.x_axis")}</Label>
               <Select
-                value={vizConfig.xKey}
+                value={vizConfig.xKey ?? ""}
                 onValueChange={(value) => value && updateVizField("xKey", value)}
               >
                 <SelectTrigger className="mt-0.5 h-7 text-[10px]">
